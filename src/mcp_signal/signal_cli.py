@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 import subprocess
 import uuid
 from collections.abc import Callable
@@ -8,6 +10,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from .config import SignalConfig
+
+_log = logging.getLogger(__name__)
+
+_E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
+
+
+def _validate_phone_number(phone_number: str) -> None:
+    if not _E164_RE.match(phone_number):
+        raise SignalCLIError("Invalid phone number format; expected E.164 (e.g. +441234567890)")
 
 
 class SignalCLIError(RuntimeError):
@@ -56,8 +67,8 @@ class SignalCLIClient:
             check=False,
         )
         if proc.returncode != 0:
-            stderr = proc.stderr.strip() or "signal-cli exited with a non-zero status"
-            raise SignalCLIError(stderr)
+            _log.debug("signal-cli stderr: %s", proc.stderr.strip())
+            raise SignalCLIError("signal-cli exited with a non-zero status")
         for line in proc.stdout.splitlines():
             line = line.strip()
             if not line:
@@ -71,7 +82,8 @@ class SignalCLIClient:
             if "error" in payload:
                 error = payload["error"]
                 message = error.get("message") if isinstance(error, dict) else str(error)
-                raise SignalCLIError(message)
+                _log.debug("signal-cli RPC error: %s", message)
+                raise SignalCLIError("signal-cli operation failed")
             return payload.get("result")
         raise SignalCLIError(f"signal-cli returned no response for method {method}")
 
@@ -106,6 +118,7 @@ class SignalCLIClient:
         ]
 
     def send_direct_message(self, phone_number: str, message: str) -> dict[str, Any]:
+        _validate_phone_number(phone_number)
         result = self._rpc("send", {"recipient": [phone_number], "message": message}) or {}
         return {
             "target_type": "direct",

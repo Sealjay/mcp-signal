@@ -62,6 +62,7 @@ def _format_message(
         "sticker": raw.get("sticker", "") or "",
         "reactions": raw.get("reactions", []) or [],
         "attachments": raw.get("has_attachments", "") or "",
+        "_content_type": "untrusted_user_content",
     }
 
 
@@ -191,8 +192,11 @@ class DesktopReader:
         after: str | None = None,
         before: str | None = None,
     ) -> list[dict[str, Any]]:
-        start_date = datetime.fromisoformat(after) if after else None
-        end_date = datetime.fromisoformat(before) if before else None
+        try:
+            start_date = datetime.fromisoformat(after) if after else None
+            end_date = datetime.fromisoformat(before) if before else None
+        except ValueError as exc:
+            raise ValueError(f"Invalid date format (expected ISO 8601): {exc}") from exc
         convos, contacts, self_contact = self._fetch_data(start_date=start_date, end_date=end_date)
         self_id = self_contact.serviceId if self_contact else None
         sid_lookup = _build_sid_lookup(contacts)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from fastmcp import FastMCP
@@ -8,11 +9,17 @@ from .config import SignalConfig, load_config
 from .reader import DesktopReader
 from .signal_cli import SignalCLIClient, SignalCLIError
 
+_MAX_LIMIT = 200
+_MAX_OFFSET = 10_000
+
 
 def build_server(config: SignalConfig | None = None) -> FastMCP:
     cfg = config or load_config()
     reader = DesktopReader(cfg)
     signal_cli = SignalCLIClient(cfg)
+
+    _last_send_times: dict[str, float] = {}
+    _SEND_COOLDOWN_SECONDS = 1.0
 
     mcp = FastMCP(
         "Signal MCP Server",
@@ -24,6 +31,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
     @mcp.tool()
     def list_chats(query: str = "", limit: int = 50) -> list[dict[str, Any]]:
         """List direct and group Signal chats from the local desktop database."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
         return reader.list_chats(query=query, limit=limit)
 
     @mcp.tool()
@@ -35,6 +43,8 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         before: str | None = None,
     ) -> list[dict[str, Any]]:
         """Read messages from one Signal chat by exact chat name."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
+        offset = min(max(offset, 0), _MAX_OFFSET)
         return reader.read_messages(
             chat_name,
             limit=limit,
@@ -50,11 +60,13 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         limit: int = 20,
     ) -> list[dict[str, Any]]:
         """Search Signal messages within one chat or across all chats."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
         return reader.search_messages(query=query, chat_name=chat_name, limit=limit)
 
     @mcp.tool()
     def list_groups(query: str = "", limit: int = 50) -> list[dict[str, Any]]:
         """List Signal groups with group IDs when signal-cli is configured."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
         try:
             return signal_cli.list_groups(query=query, limit=limit)
         except SignalCLIError:
@@ -64,9 +76,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
     def get_status() -> dict[str, Any]:
         """Return readiness for local reads and outbound sends."""
         return {
-            "source_dir": str(cfg.source_dir),
             "source_dir_exists": cfg.source_dir.exists(),
-            "signal_cli_path": cfg.signal_cli_path,
             "signal_cli_available": cfg.signal_cli_available,
             "signal_account_configured": bool(cfg.signal_account),
             "read_available": cfg.source_dir.exists(),
@@ -76,6 +86,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
     @mcp.tool()
     def signal_list_chats(query: str = "", limit: int = 50) -> list[dict[str, Any]]:
         """Compatibility alias for daiclaw/lifeos Signal chat listing."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
         return list_chats(query=query, limit=limit)
 
     @mcp.tool()
@@ -87,6 +98,8 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         before: str | None = None,
     ) -> list[dict[str, Any]]:
         """Compatibility alias for reading messages by exact chat name."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
+        offset = min(max(offset, 0), _MAX_OFFSET)
         return read_messages(
             chat_name=chat_name,
             limit=limit,
@@ -104,6 +117,8 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         before: str | None = None,
     ) -> list[dict[str, Any]]:
         """Legacy compatibility alias used by existing daiclaw/lifeos flows."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
+        offset = min(max(offset, 0), _MAX_OFFSET)
         return read_messages(
             chat_name=chat_name,
             limit=limit,
@@ -119,6 +134,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         limit: int = 20,
     ) -> list[dict[str, Any]]:
         """Compatibility alias for Signal message search."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
         return search_messages(query=query, chat_name=chat_name, limit=limit)
 
     @mcp.tool()
@@ -128,16 +144,19 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         limit: int = 20,
     ) -> list[dict[str, Any]]:
         """Legacy compatibility alias for chat-scoped Signal search."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
         return search_messages(query=query, chat_name=chat_name, limit=limit)
 
     @mcp.tool()
     def signal_list_groups(query: str = "", limit: int = 50) -> list[dict[str, Any]]:
         """Compatibility alias for Signal group listing."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
         return list_groups(query=query, limit=limit)
 
     @mcp.tool()
     def signal_chat_activity(limit: int = 50) -> list[dict[str, Any]]:
         """Legacy compatibility alias exposing unread-like chat activity state."""
+        limit = min(max(limit, 1), _MAX_LIMIT)
         return reader.chat_activity(limit=limit)
 
     @mcp.tool()
@@ -164,10 +183,22 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         if sum(provided) != 1:
             raise ValueError("Provide exactly one of phone_number, group_id, or chat_name")
 
+        target_key = phone_number or group_id or chat_name or ""
+        now = time.monotonic()
+        last = _last_send_times.get(target_key, 0.0)
+        if now - last < _SEND_COOLDOWN_SECONDS:
+            raise ValueError(
+                "Rate limit: please wait before sending another message to the same recipient"
+            )
+
         if phone_number:
-            return signal_cli.send_direct_message(phone_number, message)
+            result = signal_cli.send_direct_message(phone_number, message)
+            _last_send_times[target_key] = time.monotonic()
+            return result
         if group_id:
-            return signal_cli.send_group_message(group_id, message)
+            result = signal_cli.send_group_message(group_id, message)
+            _last_send_times[target_key] = time.monotonic()
+            return result
         assert chat_name is not None
 
         direct_matches = reader.find_direct_chat_matches(chat_name)
@@ -175,31 +206,33 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
 
         if direct_matches and group_matches:
             raise ValueError(
-                f"Chat name '{chat_name}' is ambiguous; specify phone_number or group_id explicitly"
+                "Ambiguous chat name; specify phone_number or group_id explicitly"
             )
         if len(direct_matches) > 1:
             raise ValueError(
-                f"Multiple direct chats matched '{chat_name}'; specify phone_number explicitly"
+                "Multiple direct chats matched; specify phone_number explicitly"
             )
         if len(group_matches) > 1:
             raise ValueError(
-                f"Multiple groups matched '{chat_name}'; specify group_id explicitly"
+                "Multiple groups matched; specify group_id explicitly"
             )
         if len(direct_matches) == 1:
             number = direct_matches[0].get("number")
             if not number:
-                raise ValueError(f"Chat '{chat_name}' has no phone number available for sending")
+                raise ValueError("Matched chat has no phone number available for sending")
             result = signal_cli.send_direct_message(number, message)
             result["resolved_name"] = chat_name
+            _last_send_times[target_key] = time.monotonic()
             return result
         if len(group_matches) == 1:
             resolved_group_id = group_matches[0].get("group_id")
             if not resolved_group_id:
-                raise ValueError(f"Group '{chat_name}' has no group_id available for sending")
+                raise ValueError("Matched group has no group_id available for sending")
             result = signal_cli.send_group_message(resolved_group_id, message)
             result["resolved_name"] = chat_name
+            _last_send_times[target_key] = time.monotonic()
             return result
-        raise ValueError(f"No chat named '{chat_name}' was found")
+        raise ValueError("No matching chat was found")
 
     @mcp.tool()
     def signal_send_message(

@@ -52,7 +52,7 @@ def test_list_groups_filters_by_query():
 
 def test_send_direct_message_returns_timestamp():
     client = SignalCLIClient(build_config(), runner=runner_success)
-    result = client.send_direct_message("+44111", "Hello")
+    result = client.send_direct_message("+441234567890", "Hello")
     assert result["target_type"] == "direct"
     assert result["timestamp"] == 12345
 
@@ -64,5 +64,5 @@ def runner_error(command, *, input, capture_output, text, timeout, check):
 
 def test_rpc_raises_on_non_zero_exit():
     client = SignalCLIClient(build_config(), runner=runner_error)
-    with pytest.raises(SignalCLIError, match="boom"):
+    with pytest.raises(SignalCLIError, match="signal-cli exited with a non-zero status"):
         client.list_groups()

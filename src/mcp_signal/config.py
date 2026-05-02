@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import platform
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -23,7 +23,7 @@ def load_local_env(env_file: str = ".env.local") -> None:
             continue
         key, value = line.split("=", 1)
         key = key.strip()
-        if not key:
+        if not key or not key.startswith("SIGNAL_"):
             continue
         os.environ.setdefault(key, _strip_optional_quotes(value.strip()))
 
@@ -46,9 +46,9 @@ class SignalConfig:
     source_dir: Path
     signal_cli_path: str
     signal_account: str | None
-    signal_db_password: str | None
-    signal_db_key: str | None
-    jsonrpc_timeout_seconds: int
+    signal_db_password: str | None = field(default=None, repr=False)
+    signal_db_key: str | None = field(default=None, repr=False)
+    jsonrpc_timeout_seconds: int = 30
 
     @property
     def signal_cli_available(self) -> bool:
@@ -66,5 +66,5 @@ def load_config() -> SignalConfig:
         signal_account=os.getenv("SIGNAL_ACCOUNT"),
         signal_db_password=os.getenv("SIGNAL_DB_PASSWORD"),
         signal_db_key=os.getenv("SIGNAL_DB_KEY"),
-        jsonrpc_timeout_seconds=int(os.getenv("SIGNAL_JSONRPC_TIMEOUT_SECONDS", "30")),
+        jsonrpc_timeout_seconds=min(int(os.getenv("SIGNAL_JSONRPC_TIMEOUT_SECONDS", "30")), 300),
     )
