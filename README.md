@@ -88,6 +88,8 @@ signal-cli listAccounts
 
 That account should match the `SIGNAL_ACCOUNT` value in your local `.env.local`.
 
+`signal-cli` stores its linked-account state under its own local data directory (typically `~/.local/share/signal-cli/data` on macOS/Linux). That state lives **outside this repository** and is **not committed** by `mcp-signal`.
+
 After linking, a quick local readiness check is:
 
 ```bash
@@ -206,6 +208,7 @@ Six tools in the first release.
 - Read/search uses your local Signal Desktop data only.
 - Send operations require a locally configured `signal-cli` account.
 - `.env.local` is intended for local secrets such as `SIGNAL_ACCOUNT` and is not committed.
+- `signal-cli` linked-device state is stored in its own local app data directory, outside this repo, and is not committed.
 - This tool surface is subject to prompt-injection risks from untrusted message content. Review outbound actions carefully.
 
 ## Limitations
