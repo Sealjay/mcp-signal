@@ -131,6 +131,57 @@ class DesktopReader:
             group["group_id"] = None
         return groups[:limit]
 
+    def chat_activity(self, limit: int = 50) -> list[dict[str, Any]]:
+        convos, contacts, self_contact = self._fetch_data()
+        self_id = self_contact.serviceId if self_contact else None
+        sid_lookup = _build_sid_lookup(contacts)
+        rows: list[dict[str, Any]] = []
+        for chat_id, messages in convos.items():
+            contact = contacts.get(chat_id)
+            if not contact or not messages:
+                continue
+
+            sorted_messages = sorted(messages, key=lambda message: message.get_ts(), reverse=True)
+            latest_raw = asdict(sorted_messages[0])
+            last_dt = _parse_ts(latest_raw)
+
+            last_reply_ts = 0
+            last_reply_dt: datetime | None = None
+            for message in sorted_messages:
+                raw = asdict(message)
+                if _is_outgoing(raw, self_id):
+                    last_reply_ts = message.get_ts()
+                    last_reply_dt = _parse_ts(raw)
+                    break
+
+            unanswered = 0
+            for message in sorted_messages:
+                if message.get_ts() <= last_reply_ts:
+                    break
+                raw = asdict(message)
+                if not _is_outgoing(raw, self_id):
+                    unanswered += 1
+
+            rows.append(
+                {
+                    "name": contact.name,
+                    "number": contact.number,
+                    "is_group": contact.is_group,
+                    "total_messages": len(messages),
+                    "last_message_date": last_dt.isoformat() if last_dt else "",
+                    "last_message_sender": _sender_name(
+                        latest_raw,
+                        self_id,
+                        contact,
+                        sid_lookup,
+                    ),
+                    "last_reply_date": last_reply_dt.isoformat() if last_reply_dt else "",
+                    "unanswered_count": unanswered,
+                }
+            )
+        rows.sort(key=lambda item: item["last_message_date"], reverse=True)
+        return rows[:limit]
+
     def read_messages(
         self,
         chat_name: str,

@@ -16,7 +16,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
 
     mcp = FastMCP(
         "Signal MCP Server",
-        version="0.1.1",
+        version="0.1.2",
         strict_input_validation=True,
         mask_error_details=True,
     )
@@ -74,6 +74,78 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         }
 
     @mcp.tool()
+    def signal_list_chats(query: str = "", limit: int = 50) -> list[dict[str, Any]]:
+        """Compatibility alias for daiclaw/lifeos Signal chat listing."""
+        return list_chats(query=query, limit=limit)
+
+    @mcp.tool()
+    def signal_read_messages(
+        chat_name: str,
+        limit: int = 20,
+        offset: int = 0,
+        after: str | None = None,
+        before: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Compatibility alias for reading messages by exact chat name."""
+        return read_messages(
+            chat_name=chat_name,
+            limit=limit,
+            offset=offset,
+            after=after,
+            before=before,
+        )
+
+    @mcp.tool()
+    def signal_get_chat_messages(
+        chat_name: str,
+        limit: int = 20,
+        offset: int = 0,
+        after: str | None = None,
+        before: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Legacy compatibility alias used by existing daiclaw/lifeos flows."""
+        return read_messages(
+            chat_name=chat_name,
+            limit=limit,
+            offset=offset,
+            after=after,
+            before=before,
+        )
+
+    @mcp.tool()
+    def signal_search_messages(
+        query: str,
+        chat_name: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Compatibility alias for Signal message search."""
+        return search_messages(query=query, chat_name=chat_name, limit=limit)
+
+    @mcp.tool()
+    def signal_search_chat(
+        chat_name: str,
+        query: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Legacy compatibility alias for chat-scoped Signal search."""
+        return search_messages(query=query, chat_name=chat_name, limit=limit)
+
+    @mcp.tool()
+    def signal_list_groups(query: str = "", limit: int = 50) -> list[dict[str, Any]]:
+        """Compatibility alias for Signal group listing."""
+        return list_groups(query=query, limit=limit)
+
+    @mcp.tool()
+    def signal_chat_activity(limit: int = 50) -> list[dict[str, Any]]:
+        """Legacy compatibility alias exposing unread-like chat activity state."""
+        return reader.chat_activity(limit=limit)
+
+    @mcp.tool()
+    def signal_get_status() -> dict[str, Any]:
+        """Compatibility alias for Signal readiness status."""
+        return get_status()
+
+    @mcp.tool()
     def send_message(
         message: str,
         phone_number: str | None = None,
@@ -128,5 +200,20 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             result["resolved_name"] = chat_name
             return result
         raise ValueError(f"No chat named '{chat_name}' was found")
+
+    @mcp.tool()
+    def signal_send_message(
+        message: str,
+        phone_number: str | None = None,
+        group_id: str | None = None,
+        chat_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Compatibility alias for outbound Signal text messages."""
+        return send_message(
+            message=message,
+            phone_number=phone_number,
+            group_id=group_id,
+            chat_name=chat_name,
+        )
 
     return mcp

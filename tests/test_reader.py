@@ -99,3 +99,11 @@ def test_find_direct_chat_matches_only_directs(mock_fetch):
     matches = build_reader().find_direct_chat_matches("Alice")
     assert len(matches) == 1
     assert matches[0]["number"] == "+44111"
+
+
+@patch("mcp_signal.reader.sigexport.data.fetch_data", side_effect=fake_fetch_data)
+def test_chat_activity_reports_unanswered_count(mock_fetch):
+    del mock_fetch
+    rows = build_reader().chat_activity(limit=5)
+    assert rows[0]["name"] == "Weekend Plans"
+    assert rows[0]["unanswered_count"] == 1
