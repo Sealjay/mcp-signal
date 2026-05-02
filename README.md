@@ -70,13 +70,23 @@ Environment variables set in the shell still take precedence over `.env.local`.
 
 ### Link `signal-cli` (first run only)
 
-`mcp-signal` does not manage linking itself. Link your Signal account with `signal-cli` first, for example:
+`mcp-signal` does not manage linking itself. Link the local `signal-cli` device first:
 
 ```bash
-signal-cli -a +441234567890 link -n "signal-mcp"
+signal-cli link -n "signal-mcp"
 ```
 
 Then scan the QR code in the Signal mobile app.
+
+Do **not** pass `-a` / `--account` to `link` on current `signal-cli` versions — linking a new secondary device does not take a phone number there.
+
+After the QR is accepted, confirm the linked account is visible:
+
+```bash
+signal-cli listAccounts
+```
+
+That account should match the `SIGNAL_ACCOUNT` value in your local `.env.local`.
 
 After linking, a quick local readiness check is:
 
