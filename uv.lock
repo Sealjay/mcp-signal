@@ -605,6 +605,7 @@ name = "mcp-signal"
 version = "0.1.2"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "fastmcp" },
     { name = "signal-export" },
 ]
@@ -617,6 +618,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=44.0.0" },
     { name = "fastmcp", specifier = "==3.2.4" },
     { name = "signal-export", specifier = "==3.8.3" },
 ]

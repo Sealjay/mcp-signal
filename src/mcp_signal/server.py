@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections import deque
 from typing import Any
 
 from fastmcp import FastMCP
@@ -20,6 +21,11 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
 
     _last_send_times: dict[str, float] = {}
     _SEND_COOLDOWN_SECONDS = 1.0
+
+    # Global rate limit: at most _GLOBAL_SEND_BURST sends in _GLOBAL_SEND_WINDOW seconds.
+    _global_send_window: deque[float] = deque()
+    _GLOBAL_SEND_WINDOW = 60.0
+    _GLOBAL_SEND_BURST = 10
 
     mcp = FastMCP(
         "Signal MCP Server",
@@ -165,6 +171,70 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         return get_status()
 
     @mcp.tool()
+    async def signal_get_attachment(encrypted_path: str, local_key: str) -> str:
+        """Decrypt a Signal attachment and return the path to the decrypted file.
+
+        Args:
+            encrypted_path: Full path to the encrypted attachment file
+            local_key: Base64-encoded 64-byte key (32-byte AES + 32-byte HMAC)
+
+        Returns:
+            Path to the decrypted file in a temp directory
+        """
+        import base64
+        import hashlib
+        import hmac as hmac_mod
+        import tempfile
+        from pathlib import Path
+
+        from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+        src_path = Path(encrypted_path)
+        if not src_path.exists():
+            return f"Error: attachment not found at {encrypted_path}"
+
+        key_bytes = base64.b64decode(local_key)
+        if len(key_bytes) != 64:
+            return f"Error: expected 64-byte key, got {len(key_bytes)}"
+
+        cipher_key = key_bytes[:32]
+        mac_key = key_bytes[32:]
+
+        data = src_path.read_bytes()
+        iv = data[:16]
+        their_mac = data[-32:]
+        ciphertext = data[16:-32]
+
+        our_mac = hmac_mod.new(mac_key, iv + ciphertext, hashlib.sha256).digest()
+        if not hmac_mod.compare_digest(our_mac, their_mac):
+            return "Error: HMAC verification failed"
+
+        cipher = Cipher(algorithms.AES(cipher_key), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+
+        pad_len = plaintext[-1]
+        if 1 <= pad_len <= 16:
+            plaintext = plaintext[:-pad_len]
+
+        ext = ".bin"
+        if plaintext[:3] == b"\xff\xd8\xff":
+            ext = ".jpg"
+        elif plaintext[:8] == b"\x89PNG\r\n\x1a\n":
+            ext = ".png"
+        elif plaintext[:4] == b"GIF8":
+            ext = ".gif"
+        elif plaintext[:4] == b"RIFF":
+            ext = ".webp"
+
+        tmp_dir = tempfile.mkdtemp(prefix="signal-att-")
+        out_path = Path(tmp_dir) / f"attachment{ext}"
+        out_path.write_bytes(plaintext)
+
+        return str(out_path)
+
+    @mcp.tool()
     def send_message(
         message: str,
         phone_number: str | None = None,
@@ -185,19 +255,32 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
 
         target_key = phone_number or group_id or chat_name or ""
         now = time.monotonic()
+
+        # Per-recipient cooldown
         last = _last_send_times.get(target_key, 0.0)
         if now - last < _SEND_COOLDOWN_SECONDS:
             raise ValueError(
                 "Rate limit: please wait before sending another message to the same recipient"
             )
 
+        # Global burst limit: prune expired timestamps then check window count
+        while _global_send_window and _global_send_window[0] < now - _GLOBAL_SEND_WINDOW:
+            _global_send_window.popleft()
+        if len(_global_send_window) >= _GLOBAL_SEND_BURST:
+            raise ValueError(
+                f"Global rate limit reached: at most {_GLOBAL_SEND_BURST} messages "
+                f"per {int(_GLOBAL_SEND_WINDOW)}s window"
+            )
+
         if phone_number:
             result = signal_cli.send_direct_message(phone_number, message)
             _last_send_times[target_key] = time.monotonic()
+            _global_send_window.append(time.monotonic())
             return result
         if group_id:
             result = signal_cli.send_group_message(group_id, message)
             _last_send_times[target_key] = time.monotonic()
+            _global_send_window.append(time.monotonic())
             return result
         assert chat_name is not None
 
@@ -223,6 +306,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             result = signal_cli.send_direct_message(number, message)
             result["resolved_name"] = chat_name
             _last_send_times[target_key] = time.monotonic()
+            _global_send_window.append(time.monotonic())
             return result
         if len(group_matches) == 1:
             resolved_group_id = group_matches[0].get("group_id")
@@ -231,6 +315,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             result = signal_cli.send_group_message(resolved_group_id, message)
             result["resolved_name"] = chat_name
             _last_send_times[target_key] = time.monotonic()
+            _global_send_window.append(time.monotonic())
             return result
         raise ValueError("No matching chat was found")
 
