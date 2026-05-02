@@ -41,12 +41,22 @@ cd mcp-signal
 uv sync
 ```
 
-### Configure outbound sends
-
-Set `SIGNAL_ACCOUNT` to the linked Signal account that `signal-cli` should use:
+Install `signal-cli` if you want outbound sends. On macOS, the simplest route is Homebrew:
 
 ```bash
-export SIGNAL_ACCOUNT="+441234567890"
+brew install signal-cli
+```
+
+### Configure outbound sends
+
+The server auto-loads a local `.env.local` file from the repo root if present. This file is gitignored and is the recommended place for machine-local config.
+
+Example:
+
+```bash
+cat > .env.local <<'EOF'
+SIGNAL_ACCOUNT="+441234567890"
+EOF
 ```
 
 Optional:
@@ -55,6 +65,8 @@ Optional:
 - `SIGNAL_DATA_DIR` — override the Signal Desktop data directory
 - `SIGNAL_DB_PASSWORD` — password for encrypted desktop DBs if needed
 - `SIGNAL_DB_KEY` — raw key for encrypted desktop DBs if needed
+
+Environment variables set in the shell still take precedence over `.env.local`.
 
 ### Link `signal-cli` (first run only)
 
@@ -65,6 +77,21 @@ signal-cli -a +441234567890 link -n "signal-mcp"
 ```
 
 Then scan the QR code in the Signal mobile app.
+
+After linking, a quick local readiness check is:
+
+```bash
+uv run signal-mcp smoke
+```
+
+and then:
+
+```bash
+uv run python - <<'PY'
+from mcp_signal.config import load_config
+print(load_config())
+PY
+```
 
 ## MCP client configuration
 
@@ -168,6 +195,7 @@ Six tools in the first release.
 - No network listener.
 - Read/search uses your local Signal Desktop data only.
 - Send operations require a locally configured `signal-cli` account.
+- `.env.local` is intended for local secrets such as `SIGNAL_ACCOUNT` and is not committed.
 - This tool surface is subject to prompt-injection risks from untrusted message content. Review outbound actions carefully.
 
 ## Limitations
@@ -187,4 +215,3 @@ uv run signal-mcp smoke
 uv run pytest
 uv run ruff check .
 ```
-

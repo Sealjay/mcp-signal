@@ -7,6 +7,27 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _strip_optional_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def load_local_env(env_file: str = ".env.local") -> None:
+    env_path = Path.cwd() / env_file
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        os.environ.setdefault(key, _strip_optional_quotes(value.strip()))
+
+
 def default_signal_dir() -> Path:
     home = Path.home()
     system = platform.system()
@@ -37,6 +58,7 @@ class SignalConfig:
 
 
 def load_config() -> SignalConfig:
+    load_local_env()
     source_dir = Path(os.getenv("SIGNAL_DATA_DIR", default_signal_dir()))
     return SignalConfig(
         source_dir=source_dir,
@@ -46,4 +68,3 @@ def load_config() -> SignalConfig:
         signal_db_key=os.getenv("SIGNAL_DB_KEY"),
         jsonrpc_timeout_seconds=int(os.getenv("SIGNAL_JSONRPC_TIMEOUT_SECONDS", "30")),
     )
-

@@ -1,6 +1,6 @@
 [project]
 name = "mcp-signal"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local Signal MCP server: read via Signal Desktop, send via signal-cli"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -32,4 +32,3 @@ dev = [
     "pytest==9.0.3",
     "ruff==0.15.12",
 ]
-
