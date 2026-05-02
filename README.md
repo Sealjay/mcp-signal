@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/github/license/Sealjay/mcp-signal)](LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/Sealjay/mcp-signal)](https://github.com/Sealjay/mcp-signal/issues)
 [![GitHub stars](https://img.shields.io/github/stars/Sealjay/mcp-signal?style=social)](https://github.com/Sealjay/mcp-signal)
+[![Sealjay/mcp-signal MCP server](https://glama.ai/mcp/servers/Sealjay/mcp-signal/badges/score.svg)](https://glama.ai/mcp/servers/Sealjay/mcp-signal)
 
 > A local Model Context Protocol (MCP) server that reads Signal Desktop history from the local encrypted database via [`signal-export`](https://github.com/carderne/signal-export) and sends outbound messages via [`signal-cli`](https://github.com/AsamK/signal-cli).
 
