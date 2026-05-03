@@ -14,6 +14,16 @@ from .config import SignalConfig
 _log = logging.getLogger(__name__)
 
 _E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
+_PHONE_RE = re.compile(r"\+[1-9]\d{6,14}")
+_STDERR_MAX_CHARS = 200
+
+
+def _redact_stderr(raw: str) -> str:
+    """Truncate and redact phone numbers from signal-cli stderr before logging."""
+    truncated = raw[:_STDERR_MAX_CHARS]
+    if len(raw) > _STDERR_MAX_CHARS:
+        truncated += " [truncated]"
+    return _PHONE_RE.sub("<phone_redacted>", truncated)
 
 
 def _validate_phone_number(phone_number: str) -> None:
@@ -67,7 +77,7 @@ class SignalCLIClient:
             check=False,
         )
         if proc.returncode != 0:
-            _log.debug("signal-cli stderr: %s", proc.stderr.strip())
+            _log.debug("signal-cli stderr: %s", _redact_stderr(proc.stderr.strip()))
             raise SignalCLIError("signal-cli exited with a non-zero status")
         for line in proc.stdout.splitlines():
             line = line.strip()

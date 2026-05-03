@@ -2,11 +2,24 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import sigexport.data
 
 from .config import SignalConfig
+
+# XML-like delimiters make untrusted text clearly distinct from system/tool context,
+# which is the standard defence-in-depth approach against prompt injection.
+_UNTRUSTED_OPEN = "<signal_user_content>"
+_UNTRUSTED_CLOSE = "</signal_user_content>"
+
+
+def _wrap_untrusted(text: str) -> str:
+    """Wrap a user-supplied string so LLMs treat it as data, not instructions."""
+    if not text:
+        return text
+    return f"{_UNTRUSTED_OPEN}{text}{_UNTRUSTED_CLOSE}"
 
 
 def _parse_ts(raw: dict[str, Any]) -> datetime | None:
@@ -19,9 +32,7 @@ def _parse_ts(raw: dict[str, Any]) -> datetime | None:
 
 
 def _is_outgoing(raw: dict[str, Any], self_id: str | None) -> bool:
-    return raw.get("type") == "outgoing" or (
-        self_id is not None and raw.get("source") == self_id
-    )
+    return raw.get("type") == "outgoing" or (self_id is not None and raw.get("source") == self_id)
 
 
 def _build_sid_lookup(contacts: Any) -> dict[str, Any]:
@@ -51,18 +62,36 @@ def _format_message(
     self_id: str | None,
     contact: Any,
     sid_lookup: dict[str, Any] | None = None,
+    source_dir: Path | None = None,
 ) -> dict[str, Any]:
     dt = _parse_ts(raw)
+    body = raw.get("body", "") or ""
+    quote = raw.get("quote", "") or ""
+    sticker = raw.get("sticker", "") or ""
+    attachments: list[dict[str, str]] = [
+        {
+            "file_name": _wrap_untrusted(a.get("fileName") or ""),
+            "content_type": a.get("contentType") or "",
+            "size": str(a.get("size") or ""),
+            "encrypted_path": str(
+                source_dir / "attachments.noindex" / str(a.get("path", "")).replace("\\", "/")
+            ) if a.get("path") and source_dir else "",
+            "local_key": a.get("localKey") or "",
+            "version": str(a.get("version") or ""),
+        }
+        for a in (raw.get("attachments") or [])
+    ] if raw.get("attachments") else []
     return {
         "chat_name": chat_name,
         "date": dt.isoformat() if dt else "",
         "sender": _sender_name(raw, self_id, contact, sid_lookup),
-        "body": raw.get("body", "") or "",
-        "quote": raw.get("quote", "") or "",
-        "sticker": raw.get("sticker", "") or "",
+        "body": _wrap_untrusted(body),
+        "quote": _wrap_untrusted(quote) if isinstance(quote, str) else quote,
+        "sticker": _wrap_untrusted(sticker) if isinstance(sticker, str) else sticker,
         "reactions": raw.get("reactions", []) or [],
-        "attachments": raw.get("has_attachments", "") or "",
+        "attachments": attachments,
         "_content_type": "untrusted_user_content",
+        "_untrusted_fields": ["body", "quote", "sticker"],
     }
 
 
@@ -114,6 +143,8 @@ class DesktopReader:
                 "last_message_date": "",
                 "last_message_sender": "",
                 "last_message_body": "",
+                "_content_type": "untrusted_user_content",
+                "_untrusted_fields": ["last_message_body"],
             }
             if messages:
                 latest = max(messages, key=lambda message: message.get_ts())
@@ -121,7 +152,7 @@ class DesktopReader:
                 dt = _parse_ts(raw)
                 row["last_message_date"] = dt.isoformat() if dt else ""
                 row["last_message_sender"] = _sender_name(raw, self_id, contact, sid_lookup)
-                row["last_message_body"] = raw.get("body", "") or ""
+                row["last_message_body"] = _wrap_untrusted(raw.get("body", "") or "")
             rows.append(row)
         rows.sort(key=lambda item: item["last_message_date"], reverse=True)
         return rows[:limit]
@@ -210,7 +241,10 @@ class DesktopReader:
             sorted_messages = sorted(messages, key=lambda message: message.get_ts(), reverse=True)
             end_idx = offset + limit if limit else len(sorted_messages)
             return [
-                _format_message(name, asdict(message), self_id, contact, sid_lookup)
+                _format_message(
+                    name, asdict(message), self_id, contact, sid_lookup,
+                    source_dir=self._config.source_dir,
+                )
                 for message in sorted_messages[offset:end_idx]
             ]
         return []
@@ -239,7 +273,10 @@ class DesktopReader:
                 raw = asdict(message)
                 body = raw.get("body", "") or ""
                 if query_lower in body.lower():
-                    results.append(_format_message(name, raw, self_id, contact, sid_lookup))
+                    results.append(_format_message(
+                        name, raw, self_id, contact, sid_lookup,
+                        source_dir=self._config.source_dir,
+                    ))
                     if len(results) >= limit:
                         return results
         return results
