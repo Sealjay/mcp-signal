@@ -73,7 +73,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             Field(
                 description=(
                     "Maximum number of chats to return,"
-                    " between 1 and 200."
+                    " between 1 and 200. Defaults to 50."
                 ),
             ),
         ] = 50,
@@ -106,7 +106,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             Field(
                 description=(
                     "Maximum number of messages to return,"
-                    " between 1 and 200."
+                    " between 1 and 200. Defaults to 20."
                 ),
             ),
         ] = 20,
@@ -116,6 +116,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
                 description=(
                     "Number of messages to skip from the most"
                     " recent, for pagination (0-10000)."
+                    " Defaults to 0."
                 ),
             ),
         ] = 0,
@@ -184,7 +185,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             Field(
                 description=(
                     "Maximum number of matching messages to"
-                    " return, between 1 and 200."
+                    " return, between 1 and 200. Defaults to 20."
                 ),
             ),
         ] = 20,
@@ -192,8 +193,10 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         """Search Signal message bodies for a keyword, within one
         chat or across all chats, returned newest-first.
 
-        Read-only with no side effects. Use this to find messages by
-        content. Use read_messages instead to browse a specific chat
+        Each result includes sender, date, chat name, body text,
+        reactions, and attachment metadata. Read-only with no side
+        effects. Use this to find messages by content. Use
+        read_messages instead to browse a specific chat
         chronologically.
         """
         limit = min(max(limit, 1), _MAX_LIMIT)
@@ -217,7 +220,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             Field(
                 description=(
                     "Maximum number of groups to return,"
-                    " between 1 and 200."
+                    " between 1 and 200. Defaults to 50."
                 ),
             ),
         ] = 50,
@@ -244,7 +247,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             Field(
                 description=(
                     "Maximum number of chats to return,"
-                    " between 1 and 200."
+                    " between 1 and 200. Defaults to 50."
                 ),
             ),
         ] = 50,
@@ -290,8 +293,11 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         The encrypted_path and local_key values come from attachment
         metadata in read_messages or search_messages results.
         Read-only on Signal data; writes a decrypted copy to a
-        temporary directory. Use this after reading messages that
-        contain attachments.
+        temporary directory (the temp file is not auto-cleaned).
+        Returns the absolute path to the decrypted file as a string
+        on success, or a string starting with 'Error:' on failure
+        (missing file, wrong key length, or HMAC mismatch). Use this
+        after reading messages that contain attachments.
         """
         import base64
         import hashlib
@@ -400,13 +406,15 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         group.
 
         This is a write operation that delivers a real message through
-        signal-cli. Exactly one of phone_number, group_id, or
-        chat_name must be supplied; providing zero or more than one
-        raises an error. Rate-limited to 1 message per recipient per
-        second and 10 messages per 60-second window globally. Requires
-        signal-cli and SIGNAL_ACCOUNT to be configured — call
-        get_status first to verify send_available is true. Returns
-        target_type, target identifier, and timestamp on success.
+        signal-cli. Sends are not reversible from this server — Signal
+        supports user-initiated message deletion only via the official
+        clients. Exactly one of phone_number, group_id, or chat_name
+        must be supplied; providing zero or more than one raises an
+        error. Rate-limited to 1 message per recipient per second and
+        10 messages per 60-second window globally. Requires signal-cli
+        and SIGNAL_ACCOUNT to be configured — call get_status first to
+        verify send_available is true. Returns target_type, target
+        identifier, and timestamp on success.
         """
         provided = [
             value is not None and value != ""
