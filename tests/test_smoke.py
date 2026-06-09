@@ -19,6 +19,7 @@ def test_server_exposes_core_tool_names():
     tool_names = {tool.name for tool in asyncio.run(server.list_tools())}
     expected = {
         "get_status",
+        "pairing_status",
         "list_chats",
         "read_messages",
         "search_messages",

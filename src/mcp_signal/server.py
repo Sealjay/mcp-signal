@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 from .config import SignalConfig, load_config
+from .link_manager import LinkManager
 from .reader import DesktopReader
 from .signal_cli import SignalCLIClient, SignalCLIError
 
@@ -19,6 +20,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
     cfg = config or load_config()
     reader = DesktopReader(cfg)
     signal_cli = SignalCLIClient(cfg)
+    link_manager = LinkManager(cfg)
 
     _last_send_times: dict[str, float] = {}
     _SEND_COOLDOWN_SECONDS = 1.0
@@ -55,6 +57,24 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
                 cfg.signal_cli_available and bool(cfg.signal_account)
             ),
         }
+
+    @mcp.tool()
+    def pairing_status() -> dict[str, Any]:
+        """Report the Signal device-linking setup state for first-run
+        pairing, so a client can surface the live link QR.
+
+        Returns a setup_state envelope: state 'ready' with the linked
+        account once signal-cli is linked; 'awaiting_qr' with a
+        'qr_payload' sgnl://linkdevice URI to scan in Signal (Settings →
+        Linked devices → Link new device) while a link is in progress
+        (no payload yet on the first call, until the URI is captured); or
+        'error' when signal-cli is unavailable. Read-only from the
+        caller's view, but the first call on an unlinked device starts a
+        background signal-cli link process as a side effect. Poll this to
+        drive a pairing UI; call get_status instead to check read/send
+        availability once linked.
+        """
+        return link_manager.pairing_status()
 
     @mcp.tool()
     def list_chats(
