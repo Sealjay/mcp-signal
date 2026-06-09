@@ -4,6 +4,7 @@ import logging
 import re
 import subprocess
 import threading
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -13,7 +14,10 @@ from .config import SignalConfig
 _log = logging.getLogger(__name__)
 
 # The pairing URI signal-cli prints on stdout while `link` waits for a scan.
-_LINK_URI_RE = re.compile(r"(sgnl://linkdevice\?[^\s]+)")
+# signal-cli has emitted two URI schemes across versions: the current
+# `sgnl://linkdevice?...` and the older `tsdevice:/?...`. Match either so a
+# version bump does not silently break QR capture.
+_LINK_URI_RE = re.compile(r"((?:sgnl://linkdevice|tsdevice:/)\?[^\s]+)")
 # A phone number, used to label the linked account from `listAccounts` output.
 _PHONE_RE = re.compile(r"\+[1-9]\d{6,14}")
 
@@ -140,10 +144,15 @@ class LinkManager:
     def _run_link_background(self) -> None:
         """Thread target: run ``signal-cli link`` and track its progress."""
         try:
+            # Merge stderr into stdout so signal-cli's diagnostics ride the same
+            # stream we already drain (avoids a pipe-buffer deadlock) and so a
+            # failure surfaces a real reason rather than a bare exit code — e.g.
+            # an UnsatisfiedLinkError when libsignal cannot load on a non-glibc
+            # base, which previously vanished into DEVNULL.
             proc = self._popen(
                 [self._config.signal_cli_path, "link", "-n", _DEVICE_NAME],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
                 text=True,
             )
         except Exception as exc:
@@ -157,9 +166,13 @@ class LinkManager:
             return
 
         returncode = 1
+        recent_lines = deque(maxlen=8)
         try:
             if proc.stdout is not None:
                 for raw_line in proc.stdout:
+                    stripped = raw_line.strip()
+                    if stripped:
+                        recent_lines.append(stripped)
                     uri = self._read_link_uri(raw_line)
                     if uri is None:
                         continue
@@ -189,11 +202,15 @@ class LinkManager:
                 )
                 self._link_in_progress = False
         else:
-            _log.warning("Signal device link exited with status %s", returncode)
+            tail = " | ".join(recent_lines)
+            _log.warning(
+                "Signal device link exited with status %s: %s", returncode, tail
+            )
+            detail = "Signal device link did not complete"
+            if tail:
+                detail = f"{detail}: {tail[:200]}"
             with self._lock:
-                self._snapshot = _LinkSnapshot(
-                    state="error", detail="Signal device link did not complete"
-                )
+                self._snapshot = _LinkSnapshot(state="error", detail=detail)
                 self._link_in_progress = False
 
     def _read_link_uri(self, line: str) -> str | None:
