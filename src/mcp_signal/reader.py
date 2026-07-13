@@ -66,8 +66,7 @@ def _format_message(
 ) -> dict[str, Any]:
     dt = _parse_ts(raw)
     body = raw.get("body", "") or ""
-    quote = raw.get("quote", "") or ""
-    sticker = raw.get("sticker", "") or ""
+    quote = raw.get("quote")
     attachments: list[dict[str, str]] = [
         {
             "file_name": _wrap_untrusted(a.get("fileName") or ""),
@@ -77,7 +76,6 @@ def _format_message(
                 source_dir / "attachments.noindex" / str(a.get("path", "")).replace("\\", "/")
             ) if a.get("path") and source_dir else "",
             "local_key": a.get("localKey") or "",
-            "version": str(a.get("version") or ""),
         }
         for a in (raw.get("attachments") or [])
     ] if raw.get("attachments") else []
@@ -86,12 +84,16 @@ def _format_message(
         "date": dt.isoformat() if dt else "",
         "sender": _sender_name(raw, self_id, contact, sid_lookup),
         "body": _wrap_untrusted(body),
-        "quote": _wrap_untrusted(quote) if isinstance(quote, str) else quote,
-        "sticker": _wrap_untrusted(sticker) if isinstance(sticker, str) else sticker,
+        "quote": (
+            {**quote, "text": _wrap_untrusted(quote["text"])}
+            if isinstance(quote, dict) and quote.get("text")
+            else quote or ""
+        ),
+        "sticker": raw.get("sticker", "") or "",
         "reactions": raw.get("reactions", []) or [],
         "attachments": attachments,
         "_content_type": "untrusted_user_content",
-        "_untrusted_fields": ["body", "quote", "sticker"],
+        "_untrusted_fields": ["body", "quote"],
     }
 
 
@@ -116,10 +118,15 @@ class DesktopReader:
             end_date=end_date,
         )
 
-    def list_chats(self, query: str = "", limit: int = 50) -> list[dict[str, Any]]:
-        convos, contacts, self_contact = self._fetch_data()
+    def _prepare_fetch_data(
+        self, **kwargs: Any
+    ) -> tuple[Any, Any, str | None, dict[str, Any]]:
+        convos, contacts, self_contact = self._fetch_data(**kwargs)
         self_id = self_contact.serviceId if self_contact else None
-        sid_lookup = _build_sid_lookup(contacts)
+        return convos, contacts, self_id, _build_sid_lookup(contacts)
+
+    def list_chats(self, query: str = "", limit: int = 50) -> list[dict[str, Any]]:
+        convos, contacts, self_id, sid_lookup = self._prepare_fetch_data()
         query_lower = query.strip().lower()
         rows: list[dict[str, Any]] = []
         for chat_id, messages in convos.items():
@@ -164,9 +171,7 @@ class DesktopReader:
         return groups[:limit]
 
     def chat_activity(self, limit: int = 50) -> list[dict[str, Any]]:
-        convos, contacts, self_contact = self._fetch_data()
-        self_id = self_contact.serviceId if self_contact else None
-        sid_lookup = _build_sid_lookup(contacts)
+        convos, contacts, self_id, sid_lookup = self._prepare_fetch_data()
         rows: list[dict[str, Any]] = []
         for chat_id, messages in convos.items():
             contact = contacts.get(chat_id)
@@ -177,22 +182,14 @@ class DesktopReader:
             latest_raw = asdict(sorted_messages[0])
             last_dt = _parse_ts(latest_raw)
 
-            last_reply_ts = 0
             last_reply_dt: datetime | None = None
+            unanswered = 0
             for message in sorted_messages:
                 raw = asdict(message)
                 if _is_outgoing(raw, self_id):
-                    last_reply_ts = message.get_ts()
                     last_reply_dt = _parse_ts(raw)
                     break
-
-            unanswered = 0
-            for message in sorted_messages:
-                if message.get_ts() <= last_reply_ts:
-                    break
-                raw = asdict(message)
-                if not _is_outgoing(raw, self_id):
-                    unanswered += 1
+                unanswered += 1
 
             rows.append(
                 {
@@ -228,9 +225,9 @@ class DesktopReader:
             end_date = datetime.fromisoformat(before) if before else None
         except ValueError as exc:
             raise ValueError(f"Invalid date format (expected ISO 8601): {exc}") from exc
-        convos, contacts, self_contact = self._fetch_data(start_date=start_date, end_date=end_date)
-        self_id = self_contact.serviceId if self_contact else None
-        sid_lookup = _build_sid_lookup(contacts)
+        convos, contacts, self_id, sid_lookup = self._prepare_fetch_data(
+            start_date=start_date, end_date=end_date
+        )
         for chat_id, messages in convos.items():
             contact = contacts.get(chat_id)
             if not contact:
@@ -256,9 +253,7 @@ class DesktopReader:
         chat_name: str | None = None,
         limit: int = 20,
     ) -> list[dict[str, Any]]:
-        convos, contacts, self_contact = self._fetch_data()
-        self_id = self_contact.serviceId if self_contact else None
-        sid_lookup = _build_sid_lookup(contacts)
+        convos, contacts, self_id, sid_lookup = self._prepare_fetch_data()
         query_lower = query.lower()
         results: list[dict[str, Any]] = []
         for chat_id, messages in convos.items():
