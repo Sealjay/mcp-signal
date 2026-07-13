@@ -4,21 +4,11 @@ import subprocess
 import threading
 import time
 
-from mcp_signal.config import SignalConfig
+from conftest import make_config
+
 from mcp_signal.link_manager import LinkManager
 
 _LINK_URI = "sgnl://linkdevice?uuid=abc123&pub_key=Zm9vYmFy"
-
-
-def _config(signal_cli_path: str = "/bin/echo") -> SignalConfig:
-    return SignalConfig(
-        source_dir=None,  # type: ignore[arg-type]
-        signal_cli_path=signal_cli_path,
-        signal_account="+44123",
-        signal_db_password=None,
-        signal_db_key=None,
-        jsonrpc_timeout_seconds=30,
-    )
 
 
 def _accounts_runner(stdout: str):
@@ -30,7 +20,7 @@ def _accounts_runner(stdout: str):
 
 
 def test_pairing_status_signal_cli_missing_returns_error():
-    manager = LinkManager(_config(signal_cli_path="/no/such/signal-cli"))
+    manager = LinkManager(make_config(signal_cli_path="/no/such/signal-cli"))
     result = manager.pairing_status()
     assert result == {
         "type": "setup_state",
@@ -41,7 +31,7 @@ def test_pairing_status_signal_cli_missing_returns_error():
 
 def test_pairing_status_already_linked_returns_ready():
     runner = _accounts_runner("Number: +447700900123\n")
-    manager = LinkManager(_config(), runner=runner)
+    manager = LinkManager(make_config(), runner=runner)
     result = manager.pairing_status()
     assert result == {
         "type": "setup_state",
@@ -77,7 +67,7 @@ def test_pairing_status_captures_uri_into_awaiting_qr():
         return fake_proc
 
     # listAccounts always reports unlinked so the link flow runs.
-    manager = LinkManager(_config(), runner=_accounts_runner(""), popen=popen)
+    manager = LinkManager(make_config(), runner=_accounts_runner(""), popen=popen)
 
     # First call: no link in progress, so it starts one and reports generating.
     first = manager.pairing_status()

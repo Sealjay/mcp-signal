@@ -4,7 +4,8 @@ import asyncio
 import json
 import subprocess
 
-from mcp_signal.config import SignalConfig
+from conftest import make_config
+
 from mcp_signal.server import build_server
 from mcp_signal.signal_cli import SignalCLIClient
 
@@ -45,17 +46,6 @@ def test_server_exposes_core_tool_names():
 
 # --- Global rate limit ---
 
-def _make_send_config() -> SignalConfig:
-    return SignalConfig(
-        source_dir=None,  # type: ignore[arg-type]
-        signal_cli_path="/bin/echo",
-        signal_account="+44123",
-        signal_db_password=None,
-        signal_db_key=None,
-        jsonrpc_timeout_seconds=30,
-    )
-
-
 def _runner_ok(command, *, input, capture_output, text, timeout, check):
     del command, capture_output, text, timeout, check
     request = json.loads(input.strip())
@@ -67,7 +57,7 @@ def test_global_rate_limit_blocks_burst():
     """Sending more than _GLOBAL_SEND_BURST distinct messages raises a rate-limit error."""
     from mcp_signal.server import build_server
 
-    cfg = _make_send_config()
+    cfg = make_config()
     cli = SignalCLIClient(cfg, runner=_runner_ok)
 
     from unittest.mock import patch

@@ -4,20 +4,9 @@ import json
 import subprocess
 
 import pytest
+from conftest import make_config
 
-from mcp_signal.config import SignalConfig
 from mcp_signal.signal_cli import SignalCLIClient, SignalCLIError, _redact_stderr
-
-
-def build_config() -> SignalConfig:
-    return SignalConfig(
-        source_dir=None,  # type: ignore[arg-type]
-        signal_cli_path="/bin/echo",
-        signal_account="+44123",
-        signal_db_password=None,
-        signal_db_key=None,
-        jsonrpc_timeout_seconds=30,
-    )
 
 
 def runner_success(command, *, input, capture_output, text, timeout, check):
@@ -35,7 +24,7 @@ def runner_success(command, *, input, capture_output, text, timeout, check):
 
 
 def test_list_groups_filters_by_query():
-    client = SignalCLIClient(build_config(), runner=runner_success)
+    client = SignalCLIClient(make_config(), runner=runner_success)
     groups = client.list_groups(query="weekend")
     assert groups == [
         {
@@ -51,7 +40,7 @@ def test_list_groups_filters_by_query():
 
 
 def test_send_direct_message_returns_timestamp():
-    client = SignalCLIClient(build_config(), runner=runner_success)
+    client = SignalCLIClient(make_config(), runner=runner_success)
     result = client.send_direct_message("+441234567890", "Hello")
     assert result["target_type"] == "direct"
     assert result["timestamp"] == 12345
@@ -63,7 +52,7 @@ def runner_error(command, *, input, capture_output, text, timeout, check):
 
 
 def test_rpc_raises_on_non_zero_exit():
-    client = SignalCLIClient(build_config(), runner=runner_error)
+    client = SignalCLIClient(make_config(), runner=runner_error)
     with pytest.raises(SignalCLIError, match="signal-cli exited with a non-zero status"):
         client.list_groups()
 
@@ -98,7 +87,7 @@ def runner_error_with_phone(command, *, input, capture_output, text, timeout, ch
 
 def test_rpc_stderr_is_redacted_in_log(caplog):
     import logging
-    client = SignalCLIClient(build_config(), runner=runner_error_with_phone)
+    client = SignalCLIClient(make_config(), runner=runner_error_with_phone)
     with caplog.at_level(logging.DEBUG, logger="mcp_signal.signal_cli"):
         with pytest.raises(SignalCLIError):
             client.list_groups()
