@@ -18,6 +18,7 @@ src/mcp_signal/
   config.py       Environment parsing and defaults
   reader.py       Signal Desktop read/search via sigexport
   signal_cli.py   signal-cli JSON-RPC wrapper for send + group resolution
+  link_manager.py signal-cli device-linking + QR URI capture
   server.py       FastMCP tool registration
   main.py         CLI entry point (serve / smoke)
 tests/

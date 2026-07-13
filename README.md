@@ -1,6 +1,6 @@
 # mcp-signal
 
-[![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=ffffff)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=ffffff)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/uv-package%20manager-4B5563)](https://docs.astral.sh/uv/)
 [![MCP](https://img.shields.io/badge/MCP-Model_Context_Protocol-6E44FF)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/github/license/Sealjay/mcp-signal)](LICENSE)
@@ -10,7 +10,7 @@
 
 > A local Model Context Protocol (MCP) server that reads Signal Desktop history from the local encrypted database via [`signal-export`](https://github.com/carderne/signal-export) and sends outbound messages via [`signal-cli`](https://github.com/AsamK/signal-cli).
 
-mcp-signal focuses on the core workflow for personal Signal automation — list chats, read messages, search messages, inspect groups, and send messages to direct or group chats. Everything runs locally; stdio transport with no network listener.
+mcp-signal focuses on the core workflow for personal Signal automation — list chats, read messages, search messages, inspect groups, and send messages to direct or group chats. Everything runs locally; stdio transport by default (no network listener), with an optional HTTP mode available.
 
 > **Heads up — mixed backend.** Read/search comes from the local Signal Desktop database. Sending uses `signal-cli`, which must be installed and linked to a Signal account separately. If `signal-cli` is unavailable, read/search still works but send tools do not.
 
@@ -24,13 +24,13 @@ mcp-signal focuses on the core workflow for personal Signal automation — list 
   - a direct recipient by phone number
   - a group by group ID
   - a chat by exact chat name (with ambiguity checks)
-- Runs entirely on your machine; stdio transport with no network listener
+- Runs entirely on your machine; stdio transport by default (no network listener), with an optional HTTP mode
 
 ## Setup
 
 ### Prerequisites
 
-- Python 3.13+
+- Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
 - Signal Desktop with an existing local message database
 - [`signal-cli`](https://github.com/AsamK/signal-cli) installed and linked if you want outbound sends
@@ -76,8 +76,13 @@ Optional environment variables:
 | `SIGNAL_DATA_DIR` | Override the Signal Desktop data directory |
 | `SIGNAL_DB_PASSWORD` | Password for encrypted desktop DBs if needed |
 | `SIGNAL_DB_KEY` | Raw key for encrypted desktop DBs if needed |
+| `SIGNAL_JSONRPC_TIMEOUT_SECONDS` | Timeout for `signal-cli` JSON-RPC calls, in seconds. Defaults to 30, capped at 300 |
+| `MCP_AUTH_TOKEN` | Bearer token required on HTTP requests except `/health`. Unset means no auth |
+| `MCP_LISTEN_ADDR` | `host:port` to bind in HTTP mode. Defaults to `0.0.0.0:8765`; setting it enables HTTP mode |
 
 Environment variables set in the shell take precedence over `.env.local`.
+
+`MCP_*` variables must be set in the shell/environment, not `.env.local` — the local env loader only picks up `SIGNAL_`-prefixed keys from that file.
 
 ### Link `signal-cli` (first run only)
 
@@ -106,6 +111,16 @@ Verify everything is connected:
 ```bash
 uv run signal-mcp smoke
 ```
+
+### HTTP mode (optional)
+
+By default `signal-mcp serve` runs over stdio. To serve over streamable HTTP instead, pass `--http` (optionally with `--listen-addr`), or set `MCP_LISTEN_ADDR` in the environment:
+
+```bash
+uv run signal-mcp serve --http --listen-addr 0.0.0.0:8765
+```
+
+Set `MCP_AUTH_TOKEN` to require a bearer token on all HTTP routes except `/health`.
 
 ## MCP client configuration
 
@@ -230,12 +245,15 @@ mcp-signal/
 | `read_messages` | Read messages from a specific chat |
 | `search_messages` | Search messages within one chat or across all chats |
 | `list_groups` | List groups from `signal-cli`, including group IDs |
+| `chat_activity` | List chats ranked by recent activity with last-message/last-reply dates and unanswered-inbound counts |
+| `decrypt_attachment` | Decrypt a locally stored Signal attachment and return the path to the decrypted file |
 | `send_message` | Send a text message to a direct recipient or group |
 | `get_status` | Show desktop DB / `signal-cli` / account readiness |
+| `pairing_status` | Report `signal-cli` device-link setup state and surface the live link QR for first-run pairing |
 
 ## Privacy and security
 
-- No cloud relay. No network listener. All data stays on your machine.
+- No cloud relay. stdio transport by default (no network listener); optional HTTP mode with bearer auth available. All data stays on your machine.
 - Read/search uses your local Signal Desktop data only.
 - Send operations require a locally configured `signal-cli` account.
 - `.env.local` is intended for local secrets such as `SIGNAL_ACCOUNT` and is not committed.
