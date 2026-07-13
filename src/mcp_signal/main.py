@@ -4,8 +4,12 @@ import argparse
 import hmac
 import os
 import sys
+from typing import TYPE_CHECKING
 
 from .server import build_server
+
+if TYPE_CHECKING:
+    from fastmcp.server.auth import AuthProvider
 
 
 def _split_host_port(addr: str) -> tuple[str, int]:
@@ -19,50 +23,33 @@ def _split_host_port(addr: str) -> tuple[str, int]:
     return host, int(port)
 
 
-def _build_http_middleware() -> list:
-    """Return Starlette middleware enforcing a shared bearer token.
+def _build_http_auth() -> AuthProvider | None:
+    """Return a fastmcp auth provider enforcing a shared bearer token.
 
-    When ``MCP_AUTH_TOKEN`` is set, every HTTP request except the
-    unauthenticated ``/health`` probe must carry
-    ``Authorization: Bearer <token>``. This mirrors the enforced-token
-    posture of the other Den MCP sidecars (the daemon forwards the token
-    it resolves from ``auth_token: env:SIGNAL_MCP_TOKEN``). With no token
-    configured (local / stdio use) the list is empty and no auth applies.
+    When ``MCP_AUTH_TOKEN`` is set, requests to the streamable-HTTP MCP
+    endpoint must carry ``Authorization: Bearer <token>``; fastmcp's auth
+    pipeline only wraps that endpoint, so the ``/health`` probe (registered
+    separately via ``custom_route``) stays unauthenticated. This mirrors the
+    enforced-token posture of the other Den MCP sidecars (the daemon forwards
+    the token it resolves from ``auth_token: env:SIGNAL_MCP_TOKEN``). With no
+    token configured (local / stdio use) this returns None and no auth
+    applies.
     """
     token = os.environ.get("MCP_AUTH_TOKEN", "").strip()
     if not token:
-        return []
+        return None
 
-    from starlette.middleware import Middleware
-    from starlette.types import ASGIApp, Receive, Scope, Send
+    from fastmcp.server.auth import AccessToken, TokenVerifier
 
-    class BearerAuthMiddleware:
-        def __init__(self, app: ASGIApp, expected: str) -> None:
-            self.app = app
-            self.expected = expected
+    class _SharedTokenVerifier(TokenVerifier):
+        async def verify_token(self, token_value: str) -> AccessToken | None:
+            if not hmac.compare_digest(token_value, token):
+                return None
+            return AccessToken(
+                token=token_value, client_id="den-daemon", scopes=[], expires_at=None
+            )
 
-        async def __call__(
-            self, scope: Scope, receive: Receive, send: Send
-        ) -> None:
-            if scope["type"] != "http" or scope.get("path") == "/health":
-                await self.app(scope, receive, send)
-                return
-            headers = dict(scope.get("headers") or [])
-            auth = headers.get(b"authorization", b"").decode("latin-1")
-            presented = auth[7:] if auth.startswith("Bearer ") else ""
-            if not presented or not hmac.compare_digest(presented, self.expected):
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": 401,
-                        "headers": [(b"content-type", b"text/plain")],
-                    }
-                )
-                await send({"type": "http.response.body", "body": b"unauthorized"})
-                return
-            await self.app(scope, receive, send)
-
-    return [Middleware(BearerAuthMiddleware, expected=token)]
+    return _SharedTokenVerifier()
 
 
 def _attach_health(mcp) -> None:
@@ -113,16 +100,10 @@ def main(argv: list[str] | None = None) -> int:
             )
             host, port = _split_host_port(addr)
             _attach_health(mcp)
-            # fastmcp forwards host/port/path/middleware to run_http_async;
+            mcp.auth = _build_http_auth()
             # transport="http" is fastmcp's streamable-HTTP listener served
             # at /mcp, which the Den daemon's MCP connector dials over HTTPS.
-            mcp.run(
-                transport="http",
-                host=host,
-                port=port,
-                path="/mcp",
-                middleware=_build_http_middleware(),
-            )
+            mcp.run(transport="http", host=host, port=port, path="/mcp")
         else:
             mcp.run()
         return 0
