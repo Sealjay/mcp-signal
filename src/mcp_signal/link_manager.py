@@ -79,7 +79,6 @@ class LinkManager:
         self._popen = popen or subprocess.Popen
         self._lock = threading.Lock()
         self._link_in_progress = False
-        self._thread: threading.Thread | None = None
         self._snapshot = _LinkSnapshot(state="awaiting_qr", detail=_GENERATING_DETAIL)
 
     def pairing_status(self) -> dict[str, Any]:
@@ -138,7 +137,6 @@ class LinkManager:
         thread = threading.Thread(
             target=self._run_link_background, name="signal-link", daemon=True
         )
-        self._thread = thread
         thread.start()
 
     def _run_link_background(self) -> None:

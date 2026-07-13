@@ -30,6 +30,11 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
     _GLOBAL_SEND_WINDOW = 60.0
     _GLOBAL_SEND_BURST = 10
 
+    def _record_send(key: str) -> None:
+        now = time.monotonic()
+        _last_send_times[key] = now
+        _global_send_window.append(now)
+
     mcp = FastMCP(
         "Signal MCP Server",
         version="0.2.0",
@@ -37,7 +42,14 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         mask_error_details=True,
     )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     def get_status() -> dict[str, Any]:
         """Check whether the Signal MCP server can read local messages
         and send outbound messages.
@@ -46,19 +58,28 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         signal_cli_available, signal_account_configured,
         read_available, send_available. Read-only with no side
         effects. Call this before read or send operations to verify
-        the server is correctly configured.
+        configuration; call pairing_status instead to check first-run
+        device-linking state.
         """
+        source_dir_exists = cfg.source_dir.exists()
         return {
-            "source_dir_exists": cfg.source_dir.exists(),
+            "source_dir_exists": source_dir_exists,
             "signal_cli_available": cfg.signal_cli_available,
             "signal_account_configured": bool(cfg.signal_account),
-            "read_available": cfg.source_dir.exists(),
+            "read_available": source_dir_exists,
             "send_available": (
                 cfg.signal_cli_available and bool(cfg.signal_account)
             ),
         }
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
+    )
     def pairing_status() -> dict[str, Any]:
         """Report the Signal device-linking setup state for first-run
         pairing, so a client can surface the live link QR.
@@ -76,7 +97,14 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         """
         return link_manager.pairing_status()
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     def list_chats(
         query: Annotated[
             str,
@@ -110,7 +138,14 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         limit = min(max(limit, 1), _MAX_LIMIT)
         return reader.list_chats(query=query, limit=limit)
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     def read_messages(
         chat_name: Annotated[
             str,
@@ -179,7 +214,14 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             before=before,
         )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     def search_messages(
         query: Annotated[
             str,
@@ -224,7 +266,14 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             query=query, chat_name=chat_name, limit=limit
         )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     def list_groups(
         query: Annotated[
             str,
@@ -260,7 +309,14 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         except SignalCLIError:
             return reader.list_local_groups(query=query, limit=limit)
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
     def chat_activity(
         limit: Annotated[
             int,
@@ -283,7 +339,14 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
         limit = min(max(limit, 1), _MAX_LIMIT)
         return reader.chat_activity(limit=limit)
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+    )
     async def decrypt_attachment(
         encrypted_path: Annotated[
             str,
@@ -384,7 +447,14 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
 
         return str(out_path)
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
+    )
     def send_message(
         message: Annotated[
             str,
@@ -474,15 +544,13 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
             result = signal_cli.send_direct_message(
                 phone_number, message
             )
-            _last_send_times[target_key] = time.monotonic()
-            _global_send_window.append(time.monotonic())
+            _record_send(target_key)
             return result
         if group_id:
             result = signal_cli.send_group_message(
                 group_id, message
             )
-            _last_send_times[target_key] = time.monotonic()
-            _global_send_window.append(time.monotonic())
+            _record_send(target_key)
             return result
         assert chat_name is not None
 
@@ -513,8 +581,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
                 )
             result = signal_cli.send_direct_message(number, message)
             result["resolved_name"] = chat_name
-            _last_send_times[target_key] = time.monotonic()
-            _global_send_window.append(time.monotonic())
+            _record_send(target_key)
             return result
         if len(group_matches) == 1:
             resolved_group_id = group_matches[0].get("group_id")
@@ -527,8 +594,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
                 resolved_group_id, message
             )
             result["resolved_name"] = chat_name
-            _last_send_times[target_key] = time.monotonic()
-            _global_send_window.append(time.monotonic())
+            _record_send(target_key)
             return result
         raise ValueError("No matching chat was found")
 

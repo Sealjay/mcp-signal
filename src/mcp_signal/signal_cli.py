@@ -6,14 +6,12 @@ import re
 import subprocess
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
-from .config import SignalConfig
+from .config import _E164_RE, SignalConfig
 
 _log = logging.getLogger(__name__)
 
-_E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
 _PHONE_RE = re.compile(r"\+[1-9]\d{6,14}")
 _STDERR_MAX_CHARS = 200
 
@@ -36,13 +34,6 @@ class SignalCLIError(RuntimeError):
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
-
-
-@dataclass(frozen=True)
-class SendTarget:
-    target_type: str
-    value: str
-    resolved_name: str | None = None
 
 
 class SignalCLIClient:
