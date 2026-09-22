@@ -37,7 +37,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
 
     mcp = FastMCP(
         "Signal MCP Server",
-        version="0.2.0",
+        version="0.2.1",
         strict_input_validation=True,
         mask_error_details=True,
     )
