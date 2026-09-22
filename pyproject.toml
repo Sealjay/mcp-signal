@@ -9,7 +9,7 @@ authors = [
   { name = "Chris Lloyd-Jones" }
 ]
 dependencies = [
-    "cryptography>=49.0.0",
+    "cryptography>=50.0.0",
     "fastmcp==3.4.4",
     "signal-export==3.8.3",
 ]
