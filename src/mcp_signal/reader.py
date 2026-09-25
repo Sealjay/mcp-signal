@@ -67,7 +67,7 @@ def _format_message(
     dt = _parse_ts(raw)
     body = raw.get("body", "") or ""
     quote = raw.get("quote")
-    attachments: list[dict[str, str]] = [
+    attachments: list[dict[str, Any]] = [
         {
             "file_name": _wrap_untrusted(a.get("fileName") or ""),
             "content_type": a.get("contentType") or "",
@@ -76,6 +76,8 @@ def _format_message(
                 source_dir / "attachments.noindex" / str(a.get("path", "")).replace("\\", "/")
             ) if a.get("path") and source_dir else "",
             "local_key": a.get("localKey") or "",
+            # Signal Desktop sets AttachmentFlags.VOICE_MESSAGE (1) on voice notes.
+            "is_voice_note": bool(int(a.get("flags") or 0) & 1),
         }
         for a in (raw.get("attachments") or [])
     ] if raw.get("attachments") else []
