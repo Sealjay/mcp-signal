@@ -271,7 +271,7 @@ See [`SECURITY.md`](SECURITY.md) for how to report vulnerabilities.
 - **Mixed backend:** chat history comes from Signal Desktop, while outbound sends come from `signal-cli`.
 - **No attachments:** text-only send.
 - **No real-time notifications:** polling/read only.
-- **No voice-note flag:** reads come from the Signal Desktop database, not `signal-cli` JSON, so `signal-cli` 0.14.8's `isVoiceNote` attachment field is not surfaced.
+- **Read metadata comes from Signal Desktop, not `signal-cli`:** reads use the Signal Desktop database, so `signal-cli` 0.14.8's data-message metadata is not surfaced. Voice notes are flagged as `is_voice_note` on each attachment, using Desktop's own attachment flag.
 - **Single account** per MCP instance.
 - **Group sends need `signal-cli`:** local DB reads alone do not provide enough information to send to groups safely.
 
