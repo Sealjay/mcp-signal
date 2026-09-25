@@ -8,12 +8,16 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+from fastmcp.exceptions import ToolError
+
 from .config import _E164_RE, SignalConfig
 
 _log = logging.getLogger(__name__)
 
 _PHONE_RE = re.compile(r"\+[1-9]\d{6,14}")
 _STDERR_MAX_CHARS = 200
+# ACI service ID, as stored in Signal Desktop for contacts whose phone number is hidden.
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
 
 
 def _redact_stderr(raw: str) -> str:
@@ -24,13 +28,15 @@ def _redact_stderr(raw: str) -> str:
     return _PHONE_RE.sub("<phone_redacted>", truncated)
 
 
-def _validate_phone_number(phone_number: str) -> None:
-    if not _E164_RE.match(phone_number):
-        raise SignalCLIError("Invalid phone number format; expected E.164 (e.g. +441234567890)")
+def _validate_recipient(recipient: str) -> None:
+    if not (_E164_RE.match(recipient) or _UUID_RE.match(recipient)):
+        raise SignalCLIError(
+            "Invalid recipient; expected E.164 (e.g. +441234567890) or a Signal service ID UUID"
+        )
 
 
-class SignalCLIError(RuntimeError):
-    pass
+class SignalCLIError(ToolError):
+    """A ToolError so its (already redacted) message survives mask_error_details."""
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
@@ -118,12 +124,13 @@ class SignalCLIClient:
             if group["name"].strip().casefold() == target
         ]
 
-    def send_direct_message(self, phone_number: str, message: str) -> dict[str, Any]:
-        _validate_phone_number(phone_number)
-        result = self._rpc("send", {"recipient": [phone_number], "message": message}) or {}
+    def send_direct_message(self, recipient: str, message: str) -> dict[str, Any]:
+        """Send to an E.164 number or an ACI UUID (signal-cli accepts both as recipient)."""
+        _validate_recipient(recipient)
+        result = self._rpc("send", {"recipient": [recipient], "message": message}) or {}
         return {
             "target_type": "direct",
-            "target": phone_number,
+            "target": recipient,
             "timestamp": result.get("timestamp"),
         }
 

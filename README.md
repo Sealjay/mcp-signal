@@ -58,6 +58,8 @@ mcp-signal focuses on the core workflow for personal Signal automation — list 
    brew install signal-cli
    ```
 
+   Tested with, and recommended: `signal-cli` **0.14.8** (`signal-cli --version`). Older releases may work but are not tested.
+
 ### Configure outbound sends
 
 The server auto-loads a local `.env.local` file from the repo root if present. This file is gitignored and is the recommended place for machine-local config.
@@ -247,9 +249,11 @@ mcp-signal/
 | `list_groups` | List groups from `signal-cli`, including group IDs |
 | `chat_activity` | List chats ranked by recent activity with last-message/last-reply dates and unanswered-inbound counts |
 | `decrypt_attachment` | Decrypt a locally stored Signal attachment and return the path to the decrypted file |
-| `send_message` | Send a text message to a direct recipient or group |
+| `send_message` | Send a text message to a direct recipient or group. `chat_name` resolves to a phone number, or to the contact's service ID when their number is hidden |
 | `get_status` | Show desktop DB / `signal-cli` / account readiness |
 | `pairing_status` | Report `signal-cli` device-link setup state and surface the live link QR for first-run pairing |
+
+Prompts: `summarise_chat` (summarise one chat) and `discover_topics` (recurring topics across chats or within one).
 
 ## Privacy and security
 
@@ -267,6 +271,7 @@ See [`SECURITY.md`](SECURITY.md) for how to report vulnerabilities.
 - **Mixed backend:** chat history comes from Signal Desktop, while outbound sends come from `signal-cli`.
 - **No attachments:** text-only send.
 - **No real-time notifications:** polling/read only.
+- **No voice-note flag:** reads come from the Signal Desktop database, not `signal-cli` JSON, so `signal-cli` 0.14.8's `isVoiceNote` attachment field is not surfaced.
 - **Single account** per MCP instance.
 - **Group sends need `signal-cli`:** local DB reads alone do not provide enough information to send to groups safely.
 
@@ -283,6 +288,7 @@ uv run ruff check .
 
 - **`signal-cli` not found** — confirm `signal-cli` is on `PATH` or set `SIGNAL_CLI_PATH` in `.env.local`. On macOS, `brew install signal-cli` is the simplest route.
 - **Read/search works but sends fail** — `signal-cli` is not linked or `SIGNAL_ACCOUNT` is not set. Run `signal-cli listAccounts` to verify, then check `.env.local`.
+- **Sends fail with `[403] Authorization failed`** — the linked `signal-cli` device was removed or expired. Run `signal-cli listAccounts`; if it shows this error, re-link with `signal-cli link -n "signal-mcp"`.
 - **`signal-cli link` hangs or fails** — do not pass `-a` / `--account` to `link` on current versions. Run `signal-cli link -n "signal-mcp"` and scan the QR from your phone.
 - **MCP client can't launch the server** — `args` must contain an absolute path to the repo, not relative. If `uv` itself fails with `spawn uv ENOENT`, see [macOS: `uv` PATH](#macos-uv-path).
 - **No messages returned** — confirm Signal Desktop is installed and has message history. The read path queries the local Signal Desktop database directly.

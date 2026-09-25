@@ -82,3 +82,9 @@ def test_global_rate_limit_blocks_burst():
 
     assert blocked, "Expected the global rate limit to block the burst, but all 15 sends succeeded"
     assert sent == 10, f"Expected exactly 10 sends before the global limit; got {sent}"
+
+
+def test_server_exposes_prompts():
+    server = build_server()
+    names = {prompt.name for prompt in asyncio.run(server.list_prompts())}
+    assert {"summarise_chat", "discover_topics"} <= names
