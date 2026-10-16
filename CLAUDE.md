@@ -1,6 +1,6 @@
 # mcp-signal
 
-Minimal Signal MCP server: read and search Signal Desktop data locally via `signal-export`, then send outbound messages via `signal-cli` JSON-RPC.
+Minimal Signal MCP server: read and search Signal Desktop data locally via `signal-export`, then send outbound messages via `signal-cli` JSON-RPC. stdio by default; `serve --http` is stateless streamable HTTP (MCP 2026-07-28 and older).
 
 ## Commands
 
@@ -20,7 +20,7 @@ src/mcp_signal/
   signal_cli.py   signal-cli JSON-RPC wrapper for send + group resolution
   link_manager.py signal-cli device-linking + QR URI capture
   server.py       FastMCP tool registration
-  main.py         CLI entry point (serve / smoke)
+  main.py         CLI entry point (serve / smoke), HTTP auth + /health
 tests/
 ```
 
@@ -28,6 +28,6 @@ tests/
 
 - British English for prose, American English in code.
 - Pin Python dependencies exactly.
-- Keep the first release intentionally small: read/search/send only.
+- Keep the tool surface small: read/search/send plus the setup helpers.
 - Prefer clear tool errors over silent fallbacks.
 
