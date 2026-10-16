@@ -1,6 +1,6 @@
 [project]
 name = "mcp-signal"
-version = "0.2.1"
+version = "0.2.2"
 description = "Local Signal MCP server: read via Signal Desktop, send via signal-cli"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -10,8 +10,8 @@ authors = [
 ]
 dependencies = [
     "cryptography>=50.0.0",
-    "fastmcp==3.4.4",
-    "signal-export==3.8.3",
+    "fastmcp==4.1.0",
+    "signal-export==3.9.3",
 ]
 
 [project.scripts]
@@ -31,5 +31,5 @@ select = ["E", "F", "I", "UP"]
 [dependency-groups]
 dev = [
     "pytest==9.1.1",
-    "ruff==0.15.21",
+    "ruff==0.17.1",
 ]

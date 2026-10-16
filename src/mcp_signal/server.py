@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
+from . import __version__
 from .config import SignalConfig, load_config
 from .link_manager import LinkManager
 from .reader import DesktopReader
@@ -38,7 +39,7 @@ def build_server(config: SignalConfig | None = None) -> FastMCP:
 
     mcp = FastMCP(
         "Signal MCP Server",
-        version="0.2.1",
+        version=__version__,
         strict_input_validation=True,
         mask_error_details=True,
     )
