@@ -61,7 +61,7 @@ uv run signal-mcp smoke
 uv run signal-mcp serve --http --listen-addr 0.0.0.0:8765
 ```
 
-Streamable HTTP at `/mcp`. It is stateless (no `Mcp-Session-Id`) and serves MCP 2026-07-28 as well as older revisions.
+Streamable HTTP at `/mcp`. It is stateless (no `Mcp-Session-Id`, and `GET /mcp` returns 405 because there is no standalone SSE stream) and serves MCP 2026-07-28 as well as older revisions.
 
 ## MCP client configuration
 
@@ -113,7 +113,7 @@ Prompts: `summarise_chat` and `discover_topics`.
 
 ## Privacy and limitations
 
-- No cloud relay; data stays on your machine. HTTP mode is opt-in, with bearer auth.
+- No cloud relay; data stays on your machine. HTTP mode is opt-in, and bearer auth applies only when `MCP_AUTH_TOKEN` is set (the default bind is `0.0.0.0`).
 - **Prompt injection:** this server has [the lethal trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/). A malicious incoming message could try to make an agent exfiltrate others, so review outbound actions before approving them.
 - Text-only sends; no real-time notifications; one account per instance.
 - Group sends need `signal-cli`; the desktop DB alone cannot address groups safely.

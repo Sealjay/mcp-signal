@@ -29,3 +29,29 @@ def test_http_serve_is_stateless(monkeypatch) -> None:
         "path": "/mcp",
         "stateless_http": True,
     }
+
+
+def test_stateless_http_mints_no_session_id() -> None:
+    """fastmcp honours the flag: a legacy initialize gets no Mcp-Session-Id."""
+    from starlette.testclient import TestClient
+
+    from mcp_signal.server import build_server
+
+    app = build_server().http_app(path="/mcp", stateless_http=True)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/mcp",
+            headers={"accept": "application/json, text/event-stream"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "0"},
+                },
+            },
+        )
+    assert resp.status_code == 200
+    assert "mcp-session-id" not in resp.headers
