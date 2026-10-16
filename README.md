@@ -58,7 +58,7 @@ mcp-signal focuses on the core workflow for personal Signal automation — list 
    brew install signal-cli
    ```
 
-   Tested with, and recommended: `signal-cli` **0.14.8** (`signal-cli --version`). Older releases may work but are not tested.
+   Tested with, and recommended: `signal-cli` **0.14.8** (`signal-cli --version`). Older releases may work but are not tested. 0.14.9 leaves the `link` output and the `send` arguments this server uses unchanged.
 
 ### Configure outbound sends
 
@@ -210,7 +210,7 @@ Example:
 
 | Component | Description |
 |-----------|-------------|
-| MCP server | Python/FastMCP, stdio transport |
+| MCP server | Python/FastMCP 4, stdio or streamable HTTP (`--http`) transport |
 | Read path | `signal-export` reading the local Signal Desktop database |
 | Send path | `signal-cli` JSON-RPC launched on demand |
 | State | No separate cache; reads directly from Signal Desktop data |
