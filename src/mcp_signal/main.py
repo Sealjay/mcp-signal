@@ -103,7 +103,9 @@ def main(argv: list[str] | None = None) -> int:
             mcp.auth = _build_http_auth()
             # transport="http" is fastmcp's streamable-HTTP listener served
             # at /mcp, which the Den daemon's MCP connector dials over HTTPS.
-            mcp.run(transport="http", host=host, port=port, path="/mcp")
+            # Stateless: no tool keeps per-session state, so legacy clients get
+            # no Mcp-Session-Id either, matching the 2026-07-28 spec.
+            mcp.run(transport="http", host=host, port=port, path="/mcp", stateless_http=True)
         else:
             mcp.run()
         return 0

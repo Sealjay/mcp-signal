@@ -8,153 +8,64 @@
 [![GitHub stars](https://img.shields.io/github/stars/Sealjay/mcp-signal?style=social)](https://github.com/Sealjay/mcp-signal)
 [![Sealjay/mcp-signal MCP server](https://glama.ai/mcp/servers/Sealjay/mcp-signal/badges/score.svg)](https://glama.ai/mcp/servers/Sealjay/mcp-signal)
 
-> A local Model Context Protocol (MCP) server that reads Signal Desktop history from the local encrypted database via [`signal-export`](https://github.com/carderne/signal-export) and sends outbound messages via [`signal-cli`](https://github.com/AsamK/signal-cli).
+A local MCP server for Signal. It reads and searches your Signal Desktop history via [`signal-export`](https://github.com/carderne/signal-export) and sends messages via [`signal-cli`](https://github.com/AsamK/signal-cli). Everything runs on your machine over stdio, with an optional HTTP mode.
 
-mcp-signal focuses on the core workflow for personal Signal automation — list chats, read messages, search messages, inspect groups, and send messages to direct or group chats. Everything runs locally; stdio transport by default (no network listener), with an optional HTTP mode available.
-
-> **Heads up — mixed backend.** Read/search comes from the local Signal Desktop database. Sending uses `signal-cli`, which must be installed and linked to a Signal account separately. If `signal-cli` is unavailable, read/search still works but send tools do not.
-
-## Features
-
-- List direct and group chats from Signal Desktop
-- Read recent messages from a chat
-- Search messages within one chat or across all chats
-- List group chats with `signal-cli` group IDs for outbound use
-- Send a message to:
-  - a direct recipient by phone number
-  - a group by group ID
-  - a chat by exact chat name (with ambiguity checks)
-- Runs entirely on your machine; stdio transport by default (no network listener), with an optional HTTP mode
+> **Mixed backend.** Reads come from the local Signal Desktop database. Sends need `signal-cli` installed and linked separately; without it, read and search still work.
 
 ## Setup
 
-### Prerequisites
-
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/)
-- Signal Desktop with an existing local message database
-- [`signal-cli`](https://github.com/AsamK/signal-cli) installed and linked if you want outbound sends
-
-### Installation
-
-1. **Clone this repository**
-
-   ```bash
-   git clone https://github.com/Sealjay/mcp-signal.git
-   cd mcp-signal
-   ```
-
-2. **Install dependencies**
-
-   ```bash
-   uv sync
-   ```
-
-3. **Install `signal-cli`** (optional — only needed for outbound sends)
-
-   On macOS, the simplest route is Homebrew:
-
-   ```bash
-   brew install signal-cli
-   ```
-
-   Tested with, and recommended: `signal-cli` **0.14.8** (`signal-cli --version`). Older releases may work but are not tested. 0.14.9 leaves the `link` output and the `send` arguments this server uses unchanged.
-
-### Configure outbound sends
-
-The server auto-loads a local `.env.local` file from the repo root if present. This file is gitignored and is the recommended place for machine-local config.
+**Prerequisites:** Python 3.12+, [uv](https://docs.astral.sh/uv/), Signal Desktop with local history, and (for sends) `signal-cli`.
 
 ```bash
-cat > .env.local <<'EOF'
-SIGNAL_ACCOUNT="+441234567890"
-EOF
+git clone https://github.com/Sealjay/mcp-signal.git
+cd mcp-signal
+uv sync
+brew install signal-cli   # optional, sends only
 ```
 
-Optional environment variables:
+Tested with `signal-cli` 0.14.8; 0.14.9 changes nothing this server uses.
+
+### Configure sends
+
+Put machine-local config in `.env.local` at the repo root (gitignored):
+
+```bash
+echo 'SIGNAL_ACCOUNT="+441234567890"' > .env.local
+```
 
 | Variable | Purpose |
 |----------|---------|
+| `SIGNAL_ACCOUNT` | Linked `signal-cli` account used for sends |
 | `SIGNAL_CLI_PATH` | Override the `signal-cli` binary path |
 | `SIGNAL_DATA_DIR` | Override the Signal Desktop data directory |
-| `SIGNAL_DB_PASSWORD` | Password for encrypted desktop DBs if needed |
-| `SIGNAL_DB_KEY` | Raw key for encrypted desktop DBs if needed |
-| `SIGNAL_JSONRPC_TIMEOUT_SECONDS` | Timeout for `signal-cli` JSON-RPC calls, in seconds. Defaults to 30, capped at 300 |
-| `MCP_AUTH_TOKEN` | Bearer token required on HTTP requests except `/health`. Unset means no auth |
-| `MCP_LISTEN_ADDR` | `host:port` to bind in HTTP mode. Defaults to `0.0.0.0:8765`; setting it enables HTTP mode |
+| `SIGNAL_DB_PASSWORD` / `SIGNAL_DB_KEY` | Password or raw key for an encrypted desktop DB |
+| `SIGNAL_JSONRPC_TIMEOUT_SECONDS` | `signal-cli` JSON-RPC timeout. Default 30, max 300 |
+| `MCP_AUTH_TOKEN` | Bearer token for HTTP mode (all routes except `/health`). Unset means no auth |
+| `MCP_LISTEN_ADDR` | `host:port` for HTTP mode; setting it enables HTTP mode. Default `0.0.0.0:8765` |
 
-Environment variables set in the shell take precedence over `.env.local`.
+Shell variables override `.env.local`. `.env.local` only loads `SIGNAL_*` keys, so set `MCP_*` in the shell.
 
-`MCP_*` variables must be set in the shell/environment, not `.env.local` — the local env loader only picks up `SIGNAL_`-prefixed keys from that file.
-
-### Link `signal-cli` (first run only)
-
-`mcp-signal` does not manage linking itself. Link the local `signal-cli` device first:
+### Link `signal-cli` (first run)
 
 ```bash
-signal-cli link -n "signal-mcp"
-```
-
-Scan the QR code in the Signal mobile app (*Settings → Linked Devices → Link New Device*).
-
-Do **not** pass `-a` / `--account` to `link` on current `signal-cli` versions — linking a new secondary device does not take a phone number there.
-
-After the QR is accepted, confirm the linked account is visible:
-
-```bash
-signal-cli listAccounts
-```
-
-That account should match the `SIGNAL_ACCOUNT` value in `.env.local`.
-
-`signal-cli` stores its linked-account state under its own local data directory (typically `~/.local/share/signal-cli/data` on macOS/Linux). That state lives **outside this repository** and is **not committed** by `mcp-signal`.
-
-Verify everything is connected:
-
-```bash
+signal-cli link -n "signal-mcp"   # scan the QR: Signal app > Settings > Linked Devices
+signal-cli listAccounts           # should match SIGNAL_ACCOUNT
 uv run signal-mcp smoke
 ```
 
-### HTTP mode (optional)
+`signal-cli` keeps its linked-device state in its own data directory (usually `~/.local/share/signal-cli/data`), outside this repo.
 
-By default `signal-mcp serve` runs over stdio. To serve over streamable HTTP instead, pass `--http` (optionally with `--listen-addr`), or set `MCP_LISTEN_ADDR` in the environment:
+### HTTP mode (optional)
 
 ```bash
 uv run signal-mcp serve --http --listen-addr 0.0.0.0:8765
 ```
 
-Set `MCP_AUTH_TOKEN` to require a bearer token on all HTTP routes except `/health`.
+Streamable HTTP at `/mcp`. It is stateless (no `Mcp-Session-Id`, and `GET /mcp` returns 405 because there is no standalone SSE stream) and serves MCP 2026-07-28 as well as older revisions.
 
 ## MCP client configuration
 
-All clients launch the server the same way over stdio. On macOS, you may need the absolute path to `uv` — see [macOS: `uv` PATH](#macos-uv-path) below.
-
-### Claude Code
-
-The quickest route is the CLI:
-
-```bash
-claude mcp add --transport stdio signal --scope user -- uv run --directory /absolute/path/to/mcp-signal signal-mcp serve
-```
-
-Alternatively, add to `.mcp.json` at your project root (or `~/.claude.json` for a user-scoped server):
-
-```json
-{
-  "mcpServers": {
-    "signal": {
-      "type": "stdio",
-      "command": "uv",
-      "args": ["run", "--directory", "/absolute/path/to/mcp-signal", "signal-mcp", "serve"]
-    }
-  }
-}
-```
-
-If you edit the file directly, restart the Claude Code session to pick it up.
-
-### Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+Every client launches the server over stdio with the same block. Use an absolute repo path.
 
 ```json
 {
@@ -167,77 +78,13 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 }
 ```
 
-Restart Claude Desktop. You should see `signal` listed as an available integration.
+| Client | Where |
+|--------|-------|
+| Claude Code | `claude mcp add --transport stdio signal --scope user -- uv run --directory /absolute/path/to/mcp-signal signal-mcp serve`, or the block above in `.mcp.json` |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Cursor | `~/.cursor/mcp.json` |
 
-### Cursor
-
-Add to `~/.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "signal": {
-      "command": "uv",
-      "args": ["run", "--directory", "/absolute/path/to/mcp-signal", "signal-mcp", "serve"]
-    }
-  }
-}
-```
-
-Restart Cursor.
-
-### macOS: `uv` PATH
-
-GUI apps (Claude Desktop, Cursor) don't always inherit the PATH from your interactive terminal, so `uv` may fail with `spawn uv ENOENT`. Fix by using the absolute path to `uv` in `command`:
-
-- **Homebrew** — `/opt/homebrew/bin/uv` (Apple Silicon) or `/usr/local/bin/uv` (Intel)
-- **Manual install** — run `which uv` in your terminal to find it
-
-Example:
-
-```json
-{
-  "mcpServers": {
-    "signal": {
-      "command": "/opt/homebrew/bin/uv",
-      "args": ["run", "--directory", "/absolute/path/to/mcp-signal", "signal-mcp", "serve"]
-    }
-  }
-}
-```
-
-## Architecture
-
-| Component | Description |
-|-----------|-------------|
-| MCP server | Python/FastMCP 4, stdio or streamable HTTP (`--http`) transport |
-| Read path | `signal-export` reading the local Signal Desktop database |
-| Send path | `signal-cli` JSON-RPC launched on demand |
-| State | No separate cache; reads directly from Signal Desktop data |
-
-### Data flow
-
-1. The MCP client launches `signal-mcp serve` over stdio.
-2. Read/search tools call `signal-export` against the local Signal Desktop database.
-3. Group listing and outbound sends call `signal-cli -a ACCOUNT jsonRpc`.
-4. Results are returned as structured JSON.
-
-### Project structure
-
-```text
-mcp-signal/
-  src/mcp_signal/
-    config.py
-    main.py
-    reader.py
-    server.py
-    signal_cli.py
-  tests/
-  CLAUDE.md
-  LICENSE
-  README.md
-  SECURITY.md
-```
+Restart the client afterwards. If a GUI app reports `spawn uv ENOENT`, set `command` to the absolute path from `which uv` (Homebrew: `/opt/homebrew/bin/uv`).
 
 ## Tools
 
@@ -247,61 +94,52 @@ mcp-signal/
 | `read_messages` | Read messages from a specific chat |
 | `search_messages` | Search messages within one chat or across all chats |
 | `list_groups` | List groups from `signal-cli`, including group IDs |
-| `chat_activity` | List chats ranked by recent activity with last-message/last-reply dates and unanswered-inbound counts |
-| `decrypt_attachment` | Decrypt a locally stored Signal attachment and return the path to the decrypted file |
-| `send_message` | Send a text message to a direct recipient or group. `chat_name` resolves to a phone number, or to the contact's service ID when their number is hidden |
+| `chat_activity` | Rank chats by recent activity, with last-message/last-reply dates and unanswered-inbound counts |
+| `decrypt_attachment` | Decrypt a locally stored attachment and return the decrypted file's path |
+| `send_message` | Send text to a phone number, group ID or exact chat name. `chat_name` resolves to the contact's service ID when their number is hidden |
 | `get_status` | Show desktop DB / `signal-cli` / account readiness |
-| `pairing_status` | Report `signal-cli` device-link setup state and surface the live link QR for first-run pairing |
+| `pairing_status` | Report `signal-cli` link state and surface the live link QR |
 
-Prompts: `summarise_chat` (summarise one chat) and `discover_topics` (recurring topics across chats or within one).
+Prompts: `summarise_chat` and `discover_topics`.
 
-## Privacy and security
+## Architecture
 
-- No cloud relay. stdio transport by default (no network listener); optional HTTP mode with bearer auth available. All data stays on your machine.
-- Read/search uses your local Signal Desktop data only.
-- Send operations require a locally configured `signal-cli` account.
-- `.env.local` is intended for local secrets such as `SIGNAL_ACCOUNT` and is not committed.
-- `signal-cli` linked-device state is stored in its own local app data directory, outside this repo, and is not committed.
+| Component | Description |
+|-----------|-------------|
+| MCP server | Python/FastMCP 4, stdio or stateless streamable HTTP |
+| Read path | `signal-export` against the local Signal Desktop database |
+| Send path | `signal-cli -a ACCOUNT jsonRpc`, launched on demand |
+| State | No cache; reads Signal Desktop data directly |
 
-See [`SECURITY.md`](SECURITY.md) for how to report vulnerabilities.
+## Privacy and limitations
 
-## Limitations
+- No cloud relay; data stays on your machine. HTTP mode is opt-in, and bearer auth applies only when `MCP_AUTH_TOKEN` is set (the default bind is `0.0.0.0`).
+- **Prompt injection:** this server has [the lethal trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/). A malicious incoming message could try to make an agent exfiltrate others, so review outbound actions before approving them.
+- Text-only sends; no real-time notifications; one account per instance.
+- Group sends need `signal-cli`; the desktop DB alone cannot address groups safely.
+- Read metadata comes from Signal Desktop, not `signal-cli`. Voice notes are flagged `is_voice_note` from Desktop's attachment flag.
 
-- **Prompt-injection risk:** as with many MCP servers, this one is subject to [the lethal trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/). Malicious incoming messages could attempt to instruct an agent to exfiltrate other messages. Treat the tool surface accordingly and review outbound actions before approving them.
-- **Mixed backend:** chat history comes from Signal Desktop, while outbound sends come from `signal-cli`.
-- **No attachments:** text-only send.
-- **No real-time notifications:** polling/read only.
-- **Read metadata comes from Signal Desktop, not `signal-cli`:** reads use the Signal Desktop database, so `signal-cli` 0.14.8's data-message metadata is not surfaced. Voice notes are flagged as `is_voice_note` on each attachment, using Desktop's own attachment flag.
-- **Single account** per MCP instance.
-- **Group sends need `signal-cli`:** local DB reads alone do not provide enough information to send to groups safely.
+Report vulnerabilities via [`SECURITY.md`](SECURITY.md).
+
+## Troubleshooting
+
+- **`signal-cli` not found:** put it on `PATH` or set `SIGNAL_CLI_PATH`.
+- **Reads work, sends fail:** `signal-cli` is not linked or `SIGNAL_ACCOUNT` is unset. Check `signal-cli listAccounts`.
+- **`[403] Authorization failed`:** the linked device was removed or expired. Re-link with `signal-cli link -n "signal-mcp"`.
+- **`signal-cli link` hangs:** don't pass `-a`/`--account` to `link`.
+- **No messages returned:** confirm Signal Desktop is installed and has history.
 
 ## Development
 
 ```bash
 uv sync
-uv run signal-mcp smoke
-uv run pytest
 uv run ruff check .
+uv run pytest
+uv run signal-mcp smoke
 ```
 
-## Troubleshooting
-
-- **`signal-cli` not found** — confirm `signal-cli` is on `PATH` or set `SIGNAL_CLI_PATH` in `.env.local`. On macOS, `brew install signal-cli` is the simplest route.
-- **Read/search works but sends fail** — `signal-cli` is not linked or `SIGNAL_ACCOUNT` is not set. Run `signal-cli listAccounts` to verify, then check `.env.local`.
-- **Sends fail with `[403] Authorization failed`** — the linked `signal-cli` device was removed or expired. Run `signal-cli listAccounts`; if it shows this error, re-link with `signal-cli link -n "signal-mcp"`.
-- **`signal-cli link` hangs or fails** — do not pass `-a` / `--account` to `link` on current versions. Run `signal-cli link -n "signal-mcp"` and scan the QR from your phone.
-- **MCP client can't launch the server** — `args` must contain an absolute path to the repo, not relative. If `uv` itself fails with `spawn uv ENOENT`, see [macOS: `uv` PATH](#macos-uv-path).
-- **No messages returned** — confirm Signal Desktop is installed and has message history. The read path queries the local Signal Desktop database directly.
-
-## Contributing
-
-Contributions welcome via pull request. Please:
-
-- Run `uv run ruff check .` before pushing.
-- Ensure `uv run pytest` passes.
-
-See [`CLAUDE.md`](CLAUDE.md) for the full development workflow.
+CI runs the same on every pull request. See [`CLAUDE.md`](CLAUDE.md) for structure and constraints.
 
 ## Licence
 
-MIT Licence — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
