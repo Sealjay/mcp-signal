@@ -10,7 +10,7 @@ authors = [
 ]
 dependencies = [
     "cryptography>=50.0.0",
-    "fastmcp==4.1.0",
+    "fastmcp==4.1.2",
     "signal-export==3.9.3",
 ]
 
