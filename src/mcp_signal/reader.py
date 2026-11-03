@@ -109,16 +109,24 @@ class DesktopReader:
         start_date: datetime | None = None,
         end_date: datetime | None = None,
     ) -> tuple[Any, Any, Any]:
-        return sigexport.data.fetch_data(
-            source_dir=self._config.source_dir,
+        cursor = sigexport.data.get_signal_database(
+            self._config.source_dir,
             password=self._config.signal_db_password,
             key=self._config.signal_db_key,
-            chats="",
-            include_empty=False,
-            include_disappearing=True,
-            start_date=start_date,
-            end_date=end_date,
         )
+        try:
+            return sigexport.data.fetch_data(
+                source_dir=self._config.source_dir,
+                c=cursor,
+                chats="",
+                include_empty=False,
+                include_disappearing=True,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        finally:
+            cursor.close()
+            cursor.connection.close()
 
     def _prepare_fetch_data(
         self, **kwargs: Any

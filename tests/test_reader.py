@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from unittest.mock import create_autospec
 
 import pytest
+import sigexport.data
 from conftest import make_config
 
 from mcp_signal.reader import (
@@ -76,7 +78,26 @@ def fake_fetch_data(*, start_date=None, end_date=None, **kwargs):
 
 @pytest.fixture(autouse=True)
 def _patched_fetch(monkeypatch):
-    monkeypatch.setattr("mcp_signal.reader.sigexport.data.fetch_data", fake_fetch_data)
+    fetch = create_autospec(sigexport.data.fetch_data, side_effect=fake_fetch_data)
+    database = create_autospec(sigexport.data.get_signal_database)
+    monkeypatch.setattr("mcp_signal.reader.sigexport.data.fetch_data", fetch)
+    monkeypatch.setattr("mcp_signal.reader.sigexport.data.get_signal_database", database)
+    return fetch, database
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_fetch_closes_database(_patched_fetch, fails):
+    fetch, database = _patched_fetch
+    if fails:
+        fetch.side_effect = RuntimeError("Failed to read messages")
+        with pytest.raises(RuntimeError, match="Failed to read messages"):
+            build_reader().list_chats()
+    else:
+        assert build_reader().list_chats()
+    cursor = database.return_value
+    assert fetch.call_args.kwargs["c"] is cursor
+    cursor.close.assert_called_once()
+    cursor.connection.close.assert_called_once()
 
 
 def test_list_chats_includes_groups():
