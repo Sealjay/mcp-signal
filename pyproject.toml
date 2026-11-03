@@ -10,7 +10,7 @@ authors = [
 ]
 dependencies = [
     "cryptography>=50.0.0",
-    "fastmcp==4.1.0",
+    "fastmcp==4.1.4",
     "signal-export==3.9.3",
 ]
 
@@ -30,6 +30,6 @@ select = ["E", "F", "I", "UP"]
 
 [dependency-groups]
 dev = [
-    "pytest==9.1.1",
-    "ruff==0.17.1",
+    "pytest==9.2.0",
+    "ruff==0.17.3",
 ]
