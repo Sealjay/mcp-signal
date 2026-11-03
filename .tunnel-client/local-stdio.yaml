@@ -1,0 +1,17 @@
+config_version: 1
+control_plane:
+  base_url: "https://api.openai.com"
+  api_key: "env:CONTROL_PLANE_API_KEY"
+  poll_channels:
+    - main
+health:
+  listen_addr: "127.0.0.1:8081"
+admin_ui:
+  open_browser: false
+log:
+  level: info
+  format: json
+mcp:
+  commands:
+    - channel: main
+      command: "uv run --frozen signal-mcp serve"

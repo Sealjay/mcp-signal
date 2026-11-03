@@ -63,6 +63,10 @@ uv run signal-mcp serve --http --listen-addr 0.0.0.0:8765
 
 Streamable HTTP at `/mcp`. It is stateless (no `Mcp-Session-Id`, and `GET /mcp` returns 405 because there is no standalone SSE stream) and serves MCP 2026-07-28 as well as older revisions.
 
+### OpenAI Secure MCP Tunnel (optional)
+
+`.tunnel-client/` runs the stdio server behind OpenAI's outbound tunnel client for ChatGPT. See [`.tunnel-client/README.md`](.tunnel-client/README.md). Copy `.env.example` to `.env.local` (gitignored) and keep the tunnel key as a 1Password `op://` reference; never commit real IDs or keys.
+
 ## MCP client configuration
 
 Every client launches the server over stdio with the same block. Use an absolute repo path.
