@@ -131,6 +131,7 @@ Report vulnerabilities via [`SECURITY.md`](SECURITY.md).
 - **Reads work, sends fail:** `signal-cli` is not linked or `SIGNAL_ACCOUNT` is unset. Check `signal-cli listAccounts`.
 - **`[403] Authorization failed`:** the linked device was removed or expired. Re-link with `signal-cli link -n "signal-mcp"`.
 - **`signal-cli link` hangs:** don't pass `-a`/`--account` to `link`.
+- **Native `signal-cli` crashes after a successful RPC:** the server preserves the matching success response and logs a shutdown warning. Do not retry a confirmed send; this can duplicate a message.
 - **No messages returned:** confirm Signal Desktop is installed and has history.
 
 ## Development
