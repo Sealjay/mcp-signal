@@ -57,6 +57,60 @@ def test_rpc_raises_on_non_zero_exit():
         client.list_groups()
 
 
+def test_rpc_preserves_success_before_shutdown_crash(caplog):
+    def runner(command, **kwargs):
+        request = json.loads(kwargs["input"])
+        return subprocess.CompletedProcess(
+            command, -6,
+            stdout=json.dumps({"id": request["id"], "result": {"timestamp": 12345}}),
+            stderr="Fatal error: java.lang.InterruptedException",
+        )
+
+    client = SignalCLIClient(make_config(), runner=runner)
+    result = client.send_direct_message("+441234567890", "Hello")
+    assert result["timestamp"] == 12345
+    assert "exited with status -6 after returning a successful response" in caplog.text
+
+
+def test_rpc_error_is_not_success_when_process_also_crashes():
+    def runner(command, **kwargs):
+        request = json.loads(kwargs["input"])
+        return subprocess.CompletedProcess(
+            command, -6,
+            stdout=json.dumps({"id": request["id"], "error": {"message": "failed"}}),
+            stderr="shutdown failed",
+        )
+
+    client = SignalCLIClient(make_config(), runner=runner)
+    with pytest.raises(SignalCLIError, match="signal-cli operation failed"):
+        client.list_groups()
+
+
+def test_rpc_unrelated_response_does_not_hide_process_failure():
+    def runner(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command, -6,
+            stdout=json.dumps({"id": "unrelated", "result": {"timestamp": 12345}}),
+            stderr="shutdown failed",
+        )
+
+    client = SignalCLIClient(make_config(), runner=runner)
+    with pytest.raises(SignalCLIError, match="signal-cli exited with a non-zero status"):
+        client.list_groups()
+
+
+def test_rpc_missing_result_does_not_hide_process_failure():
+    def runner(command, **kwargs):
+        request = json.loads(kwargs["input"])
+        return subprocess.CompletedProcess(
+            command, -6, stdout=json.dumps({"id": request["id"]}), stderr="shutdown failed",
+        )
+
+    client = SignalCLIClient(make_config(), runner=runner)
+    with pytest.raises(SignalCLIError, match="signal-cli exited with a non-zero status"):
+        client.list_groups()
+
+
 # --- stderr redaction ---
 
 def test_redact_stderr_removes_phone_numbers():

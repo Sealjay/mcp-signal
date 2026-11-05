@@ -73,9 +73,6 @@ class SignalCLIClient:
             timeout=self._config.jsonrpc_timeout_seconds,
             check=False,
         )
-        if proc.returncode != 0:
-            _log.debug("signal-cli stderr: %s", _redact_stderr(proc.stderr.strip()))
-            raise SignalCLIError("signal-cli exited with a non-zero status")
         for line in proc.stdout.splitlines():
             line = line.strip()
             if not line:
@@ -84,14 +81,24 @@ class SignalCLIClient:
                 payload = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if payload.get("id") != request_id:
+            if not isinstance(payload, dict) or payload.get("id") != request_id:
                 continue
             if "error" in payload:
                 error = payload["error"]
                 message = error.get("message") if isinstance(error, dict) else str(error)
                 _log.debug("signal-cli RPC error: %s", message)
                 raise SignalCLIError("signal-cli operation failed")
-            return payload.get("result")
+            if "result" in payload:
+                if proc.returncode != 0:
+                    _log.warning(
+                        "signal-cli exited with status %s after returning a successful "
+                        "response for %s; do not retry the completed operation",
+                        proc.returncode, method,
+                    )
+                return payload["result"]
+        if proc.returncode != 0:
+            _log.debug("signal-cli stderr: %s", _redact_stderr(proc.stderr.strip()))
+            raise SignalCLIError("signal-cli exited with a non-zero status")
         raise SignalCLIError(f"signal-cli returned no response for method {method}")
 
     def list_groups(self, *, query: str = "", limit: int = 50) -> list[dict[str, Any]]:
